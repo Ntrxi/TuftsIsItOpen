@@ -68,27 +68,28 @@ function headInner(loc: Location, st: Status, live: LiveData): string {
 }
 
 function bodyInner(loc: Location, st: Status): string {
+  const left: string[] = [];
   const parts: string[] = [];
-  if (loc.description) parts.push(`<p class="desc">${esc(loc.description)}</p>`);
-  if (loc.building) parts.push(`<p class="where">${esc(loc.building)}</p>`);
+  if (loc.description) left.push(`<p class="desc">${esc(loc.description)}</p>`);
+  if (loc.building) left.push(`<p class="where">${esc(loc.building)}</p>`);
 
-  parts.push(
+  left.push(
     `<div class="today"><span class="k">Today</span><span class="v">${esc(st.today)}</span>${
       st.scheduleNote ? `<span class="note">${esc(st.scheduleNote)}</span>` : ''
     }</div>`,
   );
   if (st.todayPeriods.length) {
-    parts.push(`<ul class="periods">${st.todayPeriods.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`);
+    left.push(`<ul class="periods">${st.todayPeriods.map((p) => `<li>${esc(p)}</li>`).join('')}</ul>`);
   }
   if (st.nextDepartures) {
-    parts.push(
+    left.push(
       `<div class="departures"><span class="k">Next departures</span><ul>${st.nextDepartures
         .map((d) => `<li><span>${esc(d.stop)}</span><strong>${esc(d.time)}</strong></li>`)
         .join('')}</ul></div>`,
     );
   }
   if (loc.transit?.stops?.length) {
-    parts.push(`<p class="stops"><span class="k">Stops</span>${esc(loc.transit.stops.join(' → '))}</p>`);
+    left.push(`<p class="stops"><span class="k">Stops</span>${esc(loc.transit.stops.join(' → '))}</p>`);
   }
   parts.push(
     `<table class="week"><tbody>${st.week
@@ -107,7 +108,7 @@ function bodyInner(loc: Location, st: Status): string {
   links.push(`<a href="${esc(loc.links.source)}" target="_blank" rel="noopener">Official page</a>`);
   parts.push(`<div class="links">${links.join('')}</div>`);
   if (loc.verified) parts.push(`<p class="meta">Hours checked ${esc(fmtVerified(loc.verified))}</p>`);
-  return parts.join('');
+  return `<div class="col">${left.join('')}</div><div class="col">${parts.join('')}</div>`;
 }
 
 function fmtVerified(key: string): string {

@@ -536,6 +536,13 @@ h1 .sub {
   gap: 10px;
 }
 
+.card-body .col {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
 .card-body p {
   margin: 0;
 }
@@ -702,4 +709,81 @@ h1 .sub {
 
 .foot p {
   margin: 6px 0;
+}
+
+/* Desktop: use the width -------------------------------------------------- */
+
+@media (min-width: 760px) {
+  .brand,
+  .toolbar,
+  .list,
+  .foot {
+    max-width: 1280px;
+    padding-left: 28px;
+    padding-right: 28px;
+  }
+
+  .brand {
+    padding-top: 18px;
+  }
+
+  h1 .q {
+    font-size: 1.9rem;
+  }
+
+  .clock {
+    font-size: 0.95rem;
+  }
+
+  .toolbar {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
+
+  .search-row {
+    flex: 0 1 460px;
+  }
+
+  .filters {
+    flex: 1;
+    flex-wrap: wrap;
+    margin: 0;
+    padding: 0;
+    overflow: visible;
+  }
+
+  .group {
+    margin-top: 24px;
+  }
+
+  .cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+    gap: 10px;
+    align-items: start;
+  }
+
+  .card[open] {
+    grid-column: 1 / -1;
+  }
+
+  .card-head {
+    padding: 14px 14px 14px 16px;
+  }
+
+  .card-body {
+    display: grid;
+    grid-template-columns: minmax(0, 3fr) minmax(0, 2fr);
+    column-gap: 28px;
+    padding: 14px 16px 16px;
+  }
+}
+
+@media (min-width: 1100px) {
+  .cards {
+    grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+  }
 }
