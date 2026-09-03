@@ -1,0 +1,27 @@
+{
+  "name": "tufts-is-it-open",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Is this Tufts place open right now? A fast, mobile-first status board for Tufts dining, services, facilities, and shuttles.",
+  "scripts": {
+    "build": "node scripts/build-client.mjs",
+    "dev": "node scripts/build-client.mjs --watch & wrangler dev",
+    "start": "npm run build && wrangler dev",
+    "deploy": "npm run build && wrangler deploy",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit && tsc --noEmit -p tsconfig.worker.json"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "^5.20260903.1",
+    "esbuild": "^0.28.0",
+    "typescript": "^5.6.0",
+    "vitest": "^5.0.0",
+    "wrangler": "^4.0.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true,
+    "esbuild@0.28.1": true,
+    "workerd@1.20260903.1": true
+  }
+}
