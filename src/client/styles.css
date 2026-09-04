@@ -605,17 +605,27 @@ h1 .sub {
   background: var(--open-soft);
 }
 
+/*
+ * The pin is its own full-height column at the card's right edge, split from
+ * the expand target by a rule. Everything left of the rule toggles the card;
+ * everything right of it pins. The column bleeds into the head padding so
+ * there is no dead strip around the button that would expand instead.
+ */
 .pin {
   flex: 0 0 auto;
+  align-self: stretch;
+  min-width: 52px;
   border: 0;
+  border-left: 2px dashed var(--rule);
   background: transparent;
   color: var(--ink-3);
-  padding: 8px;
-  margin: -8px -4px -8px 0;
+  padding: 0 4px;
+  margin: -12px -12px -12px 4px;
   cursor: pointer;
   display: grid;
   place-items: center;
   -webkit-tap-highlight-color: transparent;
+  transition: background 0.12s, color 0.12s;
 }
 
 .pin svg path {
@@ -623,8 +633,20 @@ h1 .sub {
   stroke-width: 1.6;
 }
 
-.pin:hover {
-  color: var(--soon);
+.pin:focus-visible {
+  outline: 3px solid var(--brown);
+  outline-offset: -3px;
+}
+
+@media (hover: hover) {
+  .pin:hover {
+    color: var(--soon);
+    background: color-mix(in srgb, var(--soon) 12%, transparent);
+  }
+}
+
+.pin:active {
+  background: color-mix(in srgb, var(--soon) 22%, transparent);
 }
 
 .pin[aria-pressed='true'] {
@@ -643,7 +665,7 @@ h1 .sub {
   border-bottom: 2.5px solid var(--ink-3);
   transform: rotate(45deg);
   transition: transform 0.2s;
-  margin: -4px 6px 0 0;
+  margin: -4px 4px 0 0;
 }
 
 .card[open] .chev {
@@ -967,6 +989,11 @@ h1 .sub {
 
   .card-head {
     padding: 14px 14px 14px 20px;
+  }
+
+  .pin {
+    min-width: 56px;
+    margin: -14px -14px -14px 4px;
   }
 
   .card-body {

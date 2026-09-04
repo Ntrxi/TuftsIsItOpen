@@ -61,10 +61,10 @@ function headInner(loc: Location, st: Status, live: LiveData): string {
       <span class="card-status"><span class="state">${esc(st.label)}</span><span class="detail">${esc(st.detail)}</span>${period}${chips(loc, st)}${liveChip}</span>
       ${departures}
     </span>
+    <span class="chev" aria-hidden="true"></span>
     <button class="pin" type="button" aria-label="Pin ${esc(loc.name)} to top" aria-pressed="false" title="Pin to top">
-      <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-    </button>
-    <span class="chev" aria-hidden="true"></span>`;
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    </button>`;
 }
 
 function bodyInner(loc: Location, st: Status): string {
