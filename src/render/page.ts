@@ -53,7 +53,6 @@ export function renderPage(locations: Location[], statuses: Status[], cal: Calen
 <footer class="foot">
   <div class="colophon">
     <span class="credit">Built by Aaron Chung, a Tufts student.</span>
-    <span><a href="https://github.com/Ntrxi/TuftsIsItOpen" target="_blank" rel="noopener">Source &amp; corrections</a> · <a href="/api/status">JSON API</a></span>
   </div>
   <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, and the shuttle tracker${liveSources ? ` (${esc(liveSources)})` : ''}. Always confirm before a special trip.</p>
 </footer>
