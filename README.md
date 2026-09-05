@@ -41,7 +41,7 @@ Unknown is a first-class state: if a break schedule has not been published, the 
 
 ```bash
 npm install
-npm run dev        # esbuild watch + wrangler dev on http://localhost:8787
+npm run dev        # client rebuilds + wrangler dev on http://localhost:8787 (analytics disabled)
 npm test           # engine + data tests
 npm run typecheck
 ```
@@ -54,7 +54,7 @@ npm run typecheck
 npm run deploy
 ```
 
-This builds the client bundle and runs `wrangler deploy` (Workers + static assets + one Analytics Engine binding).
+Wrangler's checked-in build hook builds the client bundle before deployment, including direct `wrangler deploy` and connected Workers Builds deployments.
 
 ## Analytics
 
@@ -62,20 +62,26 @@ Two free Cloudflare products, both cookie-less and with no personal data:
 
 **Cloudflare Web Analytics** (visitors, page views, referrers, countries, trends). The Worker injects the beacon script into the page only when `CF_BEACON_TOKEN` in `wrangler.jsonc` is non-empty. The token is public (it ships in the HTML), so it lives in config rather than a secret.
 
+`npm run dev` and `npm start` select `--env dev`, which disables the beacon and omits the Analytics Engine dataset. Use that environment for direct `wrangler dev` commands too.
+
 **Workers Analytics Engine** (custom events). The browser posts tiny JSON events to `POST /api/event`; the Worker validates them against the location dataset (`src/engine/analytics.ts`) and writes one data point to the `tufts_is_it_open_events` dataset via the `ANALYTICS` binding. Events:
 
 | Event | Recorded as | Not recorded |
 | --- | --- | --- |
 | Card opened (tap or `#loc-…` deep link) | `location_view`, location id, category | |
-| Search (1 s after typing stops) | `search`, query length, result count | the query text |
-| Category chip | `filter`, category id | |
+| Search snapshot (1 s after typing stops) | `search`, query length, visible result count after category/open-only filters | the query text |
+| Category change | `filter`, category id | |
 | *Open now* toggle | `filter`, `open_only`, 1 / 0 | |
 
-Data point layout: `index1`/`blob1` event type, `blob2` subject (location id, category, or `open_only`), `blob3` location category, `double1` query length or toggle state, `double2` result count. Unknown ids, categories, or event types are rejected with 400. No IPs, user agents, or free text are stored.
+Search snapshots can include paused prefixes; they are not a count of submitted searches. Clearing the input (including Escape) cancels pending tracking and lets the same term be counted again.
+
+Data point layout: `index1` is `location_view:<id>` for location views, otherwise the event type; `blob1` is always the event type, `blob2` subject (location id, category, or `open_only`), `blob3` location category, `double1` query length or toggle state, `double2` visible result count. Existing SQL using `blob1` works across old and new indexes. Unknown ids, categories, or event types are rejected with 400. No IPs, user agents, or free text are stored in analytics.
+
+The event endpoint requires same-origin browser headers, limits bodies to 512 bytes while streaming, and throttles to 300 requests per minute per connecting IP per Cloudflare location. IPs are used only as rate-limit keys. This is a best-effort pollution guard, not authentication or an exact global quota; shared networks may share the limit, and scripts can forge origin headers.
 
 ### One-time dashboard setup
 
-1. **Web Analytics**: Cloudflare Dashboard → *Analytics & Logs* → *Web Analytics* → *Add a site*. Enter the site hostname (the `workers.dev` hostname or your custom domain), choose the manual JavaScript snippet, and copy the `token` value from it. Paste it into `"CF_BEACON_TOKEN"` in `wrangler.jsonc` and redeploy. You do not need to paste the snippet itself; the Worker renders it.
+1. **Web Analytics**: Cloudflare Dashboard → *Analytics & Logs* → *Web Analytics* → *Add a site*. Enter the site hostname (the `workers.dev` hostname or your custom domain), choose the manual JavaScript snippet, and copy the `token` value from it. Paste it into `"CF_BEACON_TOKEN"` in `wrangler.jsonc` and redeploy. You do not need to paste the snippet itself; the Worker renders it. Keep automatic injection disabled to avoid duplicate beacons. If adding a CSP, allow `https://static.cloudflareinsights.com` in `script-src` and `https://cloudflareinsights.com` in `connect-src`.
 2. **Analytics Engine**: nothing to create manually. The dataset in `wrangler.jsonc` is created on first write after `npm run deploy`. Data appears under *Workers & Pages* → the Worker → *Analytics Engine*, or query it with SQL (needs an API token with the *Account Analytics: Read* permission):
 
 ```bash

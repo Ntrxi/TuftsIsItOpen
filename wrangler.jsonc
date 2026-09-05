@@ -3,6 +3,7 @@
   "name": "tuftsisitopen",
   "main": "src/worker/index.ts",
   "compatibility_date": "2026-09-01",
+  "build": { "command": "npm run build", "watch_dir": "src" },
   "assets": {
     "directory": "./public",
     "binding": "ASSETS"
@@ -12,5 +13,13 @@
   // the dashboard here; it is public (it ships in the HTML), so it is not a secret.
   "vars": { "CF_BEACON_TOKEN": "1ffbc6ee4ffe4950bbe1127462f61605" },
   // Workers Analytics Engine: privacy-safe custom events (location views, searches, filters).
-  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "tufts_is_it_open_events" }]
+  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "tufts_is_it_open_events" }],
+  "ratelimits": [{ "name": "EVENT_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }],
+  "env": {
+    "dev": {
+      "vars": { "CF_BEACON_TOKEN": "" },
+      "analytics_engine_datasets": [],
+      "ratelimits": [{ "name": "EVENT_RATE_LIMITER", "namespace_id": "1001", "simple": { "limit": 300, "period": 60 } }]
+    }
+  }
 }

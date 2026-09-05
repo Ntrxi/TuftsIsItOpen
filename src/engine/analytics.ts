@@ -7,12 +7,12 @@
  * are reduced to their length and result count).
  *
  * Data point schema (see the README for example SQL):
- *   index1  event type            location_view | search | filter
+ *   index1  sampling key          location_view:<id> | search | filter
  *   blob1   event type
  *   blob2   subject               location id · category · 'open_only' · ''
  *   blob3   location category     (location_view only)
  *   double1 value                 search: query length · open_only: 1 on / 0 off
- *   double2 search result count
+ *   double2 visible search result count (includes active filters)
  */
 
 export type AnalyticsEvent =
@@ -45,7 +45,7 @@ const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'obj
 export function toDataPoint(body: unknown, ctx: EventContext): DataPoint | null {
   if (!isRecord(body)) return null;
   const point = (subject: string, category = '', doubles: number[] = []): DataPoint => ({
-    indexes: [String(body.type)],
+    indexes: [body.type === 'location_view' ? `location_view:${subject}` : String(body.type)],
     blobs: [String(body.type), subject, category],
     doubles,
   });

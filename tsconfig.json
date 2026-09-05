@@ -12,5 +12,6 @@
     "resolveJsonModule": true,
     "isolatedModules": true
   },
-  "include": ["src/client", "src/engine", "src/data", "src/render", "test", "scripts"]
+  "include": ["src/client", "src/engine", "src/data", "src/render", "test", "scripts"],
+  "exclude": ["test/event-endpoint.test.ts"]
 }

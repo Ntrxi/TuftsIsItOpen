@@ -11,6 +11,7 @@ export interface Env {
   ANALYTICS?: AnalyticsEngineDataset;
   /** Cloudflare Web Analytics site token. Empty string disables the beacon. */
   CF_BEACON_TOKEN?: string;
+  EVENT_RATE_LIMITER: RateLimit;
 }
 
 /** Only known location ids and categories are ever written to Analytics Engine. */
@@ -20,6 +21,29 @@ const EVENT_CONTEXT: EventContext = {
 };
 /** Upper bound on an event body; real events are well under 100 bytes. */
 const MAX_EVENT_BYTES = 512;
+
+/** Stop reading as soon as the byte limit is exceeded, even without Content-Length. */
+async function readEventBody(request: Request): Promise<string | null> {
+  if (Number(request.headers.get('content-length')) > MAX_EVENT_BYTES) return null;
+  const reader = request.body?.getReader();
+  if (!reader) return '';
+  const bytes = new Uint8Array(MAX_EVENT_BYTES);
+  let size = 0;
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return new TextDecoder().decode(bytes.subarray(0, size));
+      if (size + value.byteLength > MAX_EVENT_BYTES) {
+        await reader.cancel();
+        return null;
+      }
+      bytes.set(value, size);
+      size += value.byteLength;
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
 
 /** How long a live snapshot is served before a background refresh is triggered. */
 const LIVE_FRESH_MS = 60_000;
@@ -159,10 +183,18 @@ export default {
 
     if (path === '/api/event') {
       if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
-      const text = await request.text();
-      if (text.length > MAX_EVENT_BYTES) return new Response(null, { status: 413 });
+      const origin = request.headers.get('origin');
+      const site = request.headers.get('sec-fetch-site');
+      if ((origin !== null && origin !== url.origin) || (site !== null && site !== 'same-origin') || (!origin && !site)) {
+        return new Response(null, { status: 403 });
+      }
+      // IP is used only for throttling, never written to analytics. Allow headroom for shared campus networks.
+      const { success } = await env.EVENT_RATE_LIMITER.limit({ key: `event:${request.headers.get('cf-connecting-ip') ?? 'local'}` });
+      if (!success) return new Response(null, { status: 429, headers: { 'retry-after': '60' } });
       let body: unknown;
       try {
+        const text = await readEventBody(request);
+        if (text === null) return new Response(null, { status: 413 });
         body = JSON.parse(text);
       } catch {
         return new Response(null, { status: 400 });

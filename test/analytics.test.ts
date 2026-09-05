@@ -12,7 +12,7 @@ const ctx: EventContext = {
 describe('analytics events', () => {
   it('records a location view with its category', () => {
     expect(toDataPoint({ type: 'location_view', id: 'dewick' }, ctx)).toEqual({
-      indexes: ['location_view'],
+      indexes: ['location_view:dewick'],
       blobs: ['location_view', 'dewick', 'dining'],
       doubles: [],
     });

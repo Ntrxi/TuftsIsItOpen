@@ -191,17 +191,20 @@ function init(): void {
   let trackedQuery = '';
   q?.addEventListener('input', () => {
     query = q.value.trim().toLowerCase();
-    const results = applyFilters();
+    applyFilters();
     clearTimeout(searchTimer);
+    if (!query) trackedQuery = '';
     if (query && query !== trackedQuery) {
       searchTimer = setTimeout(() => {
         trackedQuery = query;
-        track({ type: 'search', length: query.length, results });
+        track({ type: 'search', length: query.length, results: applyFilters() });
       }, SEARCH_TRACK_MS);
     }
   });
   q?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
+      clearTimeout(searchTimer);
+      trackedQuery = '';
       q.value = '';
       query = '';
       applyFilters();
@@ -218,6 +221,7 @@ function init(): void {
 
   for (const f of filters) {
     f.addEventListener('click', () => {
+      if (cat === (f.dataset.cat ?? 'all')) return;
       cat = f.dataset.cat ?? 'all';
       writeJson(LS_CAT, cat);
       for (const other of filters) {
