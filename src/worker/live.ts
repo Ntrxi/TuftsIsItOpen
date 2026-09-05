@@ -55,10 +55,11 @@ function parseLibCalTime(text: string): number | undefined {
 function libcalDayHours(day: LibCalDay, splitLateNight: boolean): DayHours | 'closed' | undefined {
   const status = day.times.status;
   if (status === 'closed') return 'closed';
-  if (status === '24hours') return [{ start: 0, end: 1440 }];
-  if (status !== 'open' || !day.times.hours?.length) return undefined; // not-set etc.
+  // A 24-hour day is one midnight-to-midnight range, split at the public cutoff like any other.
+  const ranges = status === '24hours' ? [{ from: 'midnight', to: 'midnight' }] : status === 'open' ? day.times.hours : undefined;
+  if (!ranges?.length) return undefined; // not-set etc.
   const out: DayHours = [];
-  for (const h of day.times.hours) {
+  for (const h of ranges) {
     const from = parseLibCalTime(h.from);
     let to = parseLibCalTime(h.to);
     if (from === undefined || to === undefined) return undefined;
@@ -267,9 +268,18 @@ export interface ProviderResult {
   sources: LiveData['sources'];
 }
 
+const STALE_SUFFIX = ' · live feed unavailable, may be out of date';
+
+/** Carried-forward overrides say so on the card, not only in the footer. */
+function markStale(o: DateOverride): DateOverride {
+  return o.note.endsWith(STALE_SUFFIX) ? o : { ...o, note: o.note + STALE_SUFFIX };
+}
+
 /**
- * Fetch every feed. When a feed fails and `previous` holds data for it, that data is kept and
- * the source is reported as 'stale' rather than dropping closures the page was already showing.
+ * Fetch every feed. When an hours feed fails and `previous` holds data for it, that data is kept
+ * (labelled as possibly out of date) and the source is reported as 'stale' rather than dropping
+ * closures the page was already showing. Vehicle counts are not kept: a count from minutes ago
+ * says nothing about where the buses are now.
  */
 export async function fetchAllLive(now: Date, previous?: LiveData): Promise<LiveData> {
   const todayKey = toLocal(now).key;
@@ -279,7 +289,7 @@ export async function fetchAllLive(now: Date, previous?: LiveData): Promise<Live
 
   const keepPrevious = (source: keyof LiveData['sources'] & string, ids: string[]): void => {
     const had = previous && previous.sources[source] !== undefined && previous.sources[source] !== 'error';
-    if (had) for (const id of ids) if (previous!.overrides[id]) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!];
+    if (had) for (const id of ids) if (previous!.overrides[id]) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!.map(markStale)];
     sources[source] = had ? 'stale' : 'error';
   };
 
@@ -299,7 +309,7 @@ export async function fetchAllLive(now: Date, previous?: LiveData): Promise<Live
     }
     // Locations whose menus could not all be read keep whatever the last snapshot showed for them.
     const kept = previous && previous.sources.dining !== undefined && previous.sources.dining !== 'error' ? nutri.value.failed.filter((id) => previous.overrides[id]) : [];
-    for (const id of kept) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!];
+    for (const id of kept) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!.map(markStale)];
     sources.dining = kept.length ? 'stale' : 'ok';
   } else {
     keepPrevious(
@@ -308,15 +318,8 @@ export async function fetchAllLive(now: Date, previous?: LiveData): Promise<Live
     );
   }
 
-  let vehicles: Record<string, number> = {};
-  if (passio.status === 'fulfilled') {
-    vehicles = passio.value;
-    sources.shuttles = 'ok';
-  } else {
-    const had = previous && previous.sources.shuttles !== undefined && previous.sources.shuttles !== 'error';
-    if (had) vehicles = previous!.vehicles;
-    sources.shuttles = had ? 'stale' : 'error';
-  }
+  const vehicles = passio.status === 'fulfilled' ? passio.value : {};
+  sources.shuttles = passio.status === 'fulfilled' ? 'ok' : 'error';
 
   return { fetchedAt: now.toISOString(), overrides, vehicles, sources };
 }

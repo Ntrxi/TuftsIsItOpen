@@ -1,13 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import { _internal } from '../src/worker/live';
 
-const { readMenuDay, nutrisliceDayOverride } = _internal;
+const { readMenuDay, nutrisliceDayOverride, libcalDayHours } = _internal;
 const holiday = (text: string) => ({ text, is_holiday: true, food: null });
 const food = (name: string) => ({ text: name, is_holiday: false, food: { name } });
 const station = (name: string) => ({ text: name, is_holiday: false, is_station_header: true, food: null });
 
 const closed = { text: 'Carm closed for building issue', hasFood: false };
 const served = { text: '', hasFood: true };
+
+describe('LibCal day parsing', () => {
+  it('splits a 24-hour day at the public cutoff like any other Tisch day', () => {
+    const day = { date: '2026-12-16', times: { status: '24hours' } };
+    expect(libcalDayHours(day, true)).toEqual([
+      { start: 0, end: 1260, label: 'Open to public' },
+      { start: 1260, end: 1440, label: 'Tufts ID only · late-night study' },
+    ]);
+    expect(libcalDayHours(day, false)).toEqual([{ start: 0, end: 1440 }]);
+  });
+});
 
 describe('Nutrislice weekly menu parsing', () => {
   it('summarizes what each menu publishes for a day', () => {

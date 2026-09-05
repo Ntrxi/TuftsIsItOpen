@@ -34,7 +34,15 @@ describe('live snapshot cache', () => {
     vi.setSystemTime(new Date('2026-09-10T16:20:00Z'));
     vi.stubGlobal('fetch', feedsDown());
     const second = await live();
-    expect(second.sources).toEqual({ library: 'stale', dining: 'stale', shuttles: 'stale' });
+    expect(second.sources).toEqual({ library: 'stale', dining: 'stale', shuttles: 'error' });
     expect(second.overrides.carmichael?.[0]).toMatchObject({ from: '2026-09-12', hours: 'closed' });
+    expect(second.overrides.carmichael?.[0]?.note).toBe('Closed: “Closed for testing” (per Tufts Dining menu) · live feed unavailable, may be out of date');
+    // Bus counts are not carried forward: the chip disappears instead of showing an old number.
+    expect(second.vehicles).toEqual({});
+
+    // A further failure keeps the label single.
+    vi.setSystemTime(new Date('2026-09-10T16:40:00Z'));
+    const third = await live();
+    expect(third.overrides.carmichael?.[0]?.note).toBe(second.overrides.carmichael?.[0]?.note);
   });
 });
