@@ -118,39 +118,63 @@ const NUTRISLICE: { slug: string; menu: string; locId: string }[] = [
   { slug: 'smfa', menu: 'lunch', locId: 'smfa-cafe' },
 ];
 
+/**
+ * Shape of the weekly menu API (`/menu/api/weeks/school/…/menu-type/…/Y/M/D/`), which
+ * returns every day Sunday–Saturday of the week containing the date. Closures and notices
+ * are bold `is_holiday` lines; real menu entries carry a `food` object.
+ *
+ * The lighter "digest" endpoint is deliberately not used: it only ever returns
+ * Monday–Friday, so a weekend closure (e.g. Carmichael on Sat 2026-09-05) never surfaced.
+ */
+interface NutrisliceItem {
+  text?: string | null;
+  is_holiday?: boolean;
+  is_station_header?: boolean;
+  is_section_title?: boolean;
+  food?: unknown;
+}
 interface NutrisliceDay {
   date: string;
-  menu_items?: unknown[];
-  holiday_text?: string | null;
+  menu_items?: NutrisliceItem[];
+}
+interface NutrisliceWeek {
+  days?: NutrisliceDay[];
 }
 
 const CLOSED_RE = /\b(clos|holiday|break|no service|not open)/i;
 
+/** Convert one menu day into a date override, or undefined when there is nothing to report. */
+function nutrisliceDayOverride(day: NutrisliceDay): DateOverride | undefined {
+  const items = day.menu_items ?? [];
+  const text = (items.find((i) => i.is_holiday && (i.text ?? '').trim())?.text ?? '').trim();
+  if (!day.date || !text) return undefined;
+  const hasFood = items.some((i) => !i.is_holiday && i.food != null);
+  if (!hasFood && CLOSED_RE.test(text)) {
+    return { from: day.date, hours: 'closed', note: `Closed: “${text}” (per Tufts Dining menu)` };
+  }
+  return { from: day.date, hours: 'regular', note: `Tufts Dining notice: “${text}”` };
+}
+
 async function nutrisliceOverrides(todayKey: string): Promise<Record<string, DateOverride[]>> {
   const out: Record<string, DateOverride[]> = {};
+  // Each call covers Sun–Sat of the week containing the date, so two calls span today through next week.
   const weeks = [todayKey, addDays(todayKey, 7)];
   await Promise.all(
     NUTRISLICE.map(async (cfg) => {
       const overrides: DateOverride[] = [];
       for (const weekKey of weeks) {
         const [y, m, d] = weekKey.split('-');
-        const url = `https://tufts.api.nutrislice.com/menu/api/weeks/digest/school/${cfg.slug}/menu-type/${cfg.menu}/date/${y}/${m}/${d}`;
-        let days: NutrisliceDay[];
+        const url = `https://tufts.api.nutrislice.com/menu/api/weeks/school/${cfg.slug}/menu-type/${cfg.menu}/${y}/${m}/${d}/`;
+        let week: NutrisliceWeek;
         try {
-          const json = await getJson<NutrisliceDay[] | Record<string, NutrisliceDay>>(url);
-          days = Array.isArray(json) ? json : Object.values(json);
+          week = await getJson<NutrisliceWeek>(url);
         } catch {
           continue;
         }
-        for (const day of days) {
-          const text = (day.holiday_text ?? '').trim();
-          if (!day.date || !text || day.date < todayKey) continue;
-          const noItems = !day.menu_items || day.menu_items.length === 0;
-          if (noItems && CLOSED_RE.test(text)) {
-            overrides.push({ from: day.date, hours: 'closed', note: `Closed: “${text}” (per Tufts Dining menu)` });
-          } else {
-            overrides.push({ from: day.date, hours: 'regular', note: `Tufts Dining notice: “${text}”` });
-          }
+        for (const day of week.days ?? []) {
+          if (!day?.date || day.date < todayKey) continue;
+          const ov = nutrisliceDayOverride(day);
+          if (ov) overrides.push(ov);
         }
       }
       if (overrides.length) out[cfg.locId] = dedupe(overrides);
@@ -240,5 +264,5 @@ export async function fetchAllLive(now: Date): Promise<LiveData> {
 }
 
 /** Exposed for tests. */
-export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE };
+export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, nutrisliceDayOverride };
 export type { Interval };

@@ -117,13 +117,12 @@ export const dining: Location[] = [
       { period: 'fall-exams-2026', hours: 'regular' },
     ],
     overrides: [
-      { from: '2026-09-03', hours: 'closed', note: 'Closed today due to a building issue (per dining.tufts.edu)' },
-      { from: '2026-09-04', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation hours' },
-      { from: '2026-09-05', hours: splitDay(null, ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation hours' },
-      { from: '2026-09-06', to: '2026-09-11', hours: hallDay('7am', '8pm'), note: 'Orientation / Labor Day hours' },
+      { from: '2026-09-03', to: '2026-09-05', hours: 'closed', note: 'Closed due to a building issue; reopens for dinner Sun Sep 6 (per dining.tufts.edu)' },
+      { from: '2026-09-06', hours: [r('5pm', '8pm', 'Dinner')], note: 'Dinner only: reopening after the building closure (per dining.tufts.edu)' },
+      { from: '2026-09-07', to: '2026-09-11', hours: hallDay('7am', '8pm'), note: 'Orientation / Labor Day hours' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/carmichael-dining-hall', schedule: PREO_SRC },
-    verified: '2026-09-03',
+    verified: '2026-09-05',
     confidence: 'high',
   },
   {

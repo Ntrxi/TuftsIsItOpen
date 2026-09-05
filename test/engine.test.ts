@@ -196,6 +196,15 @@ describe('computeStatus', () => {
     expect(sun.period).toBe('Dinner');
   });
 
+  it('keeps Carmichael closed through the Sep 2026 building issue and reopens for Sunday dinner', () => {
+    const sat = computeStatus(byId('carmichael'), calendar, at('2026-09-05', '12:30'));
+    expect(sat.state).toBe('closed');
+    expect(sat.scheduleNote).toContain('building issue');
+    expect(sat.detail).toBe('Opens tomorrow 5:00 PM');
+    const sun = computeStatus(byId('carmichael'), calendar, at('2026-09-06', '12:30'));
+    expect(sun.state).toBe('closed');
+    expect(sun.detail).toBe('Opens 5:00 PM');
+  });
   it('applies live overrides ahead of static data', () => {
     const live = { dewick: [{ from: '2026-09-10', hours: 'closed' as const, note: 'Closed: “Test” (per Tufts Dining menu)' }] };
     const st = computeStatus(byId('dewick'), calendar, at('2026-09-10', '12:30'), live);
