@@ -54,7 +54,38 @@ npm run typecheck
 npm run deploy
 ```
 
-This builds the client bundle and runs `wrangler deploy` (Workers + static assets, no other bindings needed).
+This builds the client bundle and runs `wrangler deploy` (Workers + static assets + one Analytics Engine binding).
+
+## Analytics
+
+Two free Cloudflare products, both cookie-less and with no personal data:
+
+**Cloudflare Web Analytics** (visitors, page views, referrers, countries, trends). The Worker injects the beacon script into the page only when `CF_BEACON_TOKEN` in `wrangler.jsonc` is non-empty. The token is public (it ships in the HTML), so it lives in config rather than a secret.
+
+**Workers Analytics Engine** (custom events). The browser posts tiny JSON events to `POST /api/event`; the Worker validates them against the location dataset (`src/engine/analytics.ts`) and writes one data point to the `tufts_is_it_open_events` dataset via the `ANALYTICS` binding. Events:
+
+| Event | Recorded as | Not recorded |
+| --- | --- | --- |
+| Card opened (tap or `#loc-…` deep link) | `location_view`, location id, category | |
+| Search (1 s after typing stops) | `search`, query length, result count | the query text |
+| Category chip | `filter`, category id | |
+| *Open now* toggle | `filter`, `open_only`, 1 / 0 | |
+
+Data point layout: `index1`/`blob1` event type, `blob2` subject (location id, category, or `open_only`), `blob3` location category, `double1` query length or toggle state, `double2` result count. Unknown ids, categories, or event types are rejected with 400. No IPs, user agents, or free text are stored.
+
+### One-time dashboard setup
+
+1. **Web Analytics**: Cloudflare Dashboard → *Analytics & Logs* → *Web Analytics* → *Add a site*. Enter the site hostname (the `workers.dev` hostname or your custom domain), choose the manual JavaScript snippet, and copy the `token` value from it. Paste it into `"CF_BEACON_TOKEN"` in `wrangler.jsonc` and redeploy. You do not need to paste the snippet itself; the Worker renders it.
+2. **Analytics Engine**: nothing to create manually. The dataset in `wrangler.jsonc` is created on first write after `npm run deploy`. Data appears under *Workers & Pages* → the Worker → *Analytics Engine*, or query it with SQL (needs an API token with the *Account Analytics: Read* permission):
+
+```bash
+curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/analytics_engine/sql"   -H "Authorization: Bearer $API_TOKEN"   -d "SELECT blob2 AS location, blob3 AS category, SUM(_sample_interval) AS views
+      FROM tufts_is_it_open_events
+      WHERE blob1 = 'location_view' AND timestamp > NOW() - INTERVAL '7' DAY
+      GROUP BY location, category ORDER BY views DESC"
+```
+
+Always sum `_sample_interval` rather than `COUNT(*)`, because Analytics Engine samples under load. Data is retained for 3 months.
 
 ## Updating hours
 

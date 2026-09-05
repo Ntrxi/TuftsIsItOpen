@@ -2,6 +2,7 @@ import { calendar, locations } from '../data';
 import { computeAll } from '../engine/status';
 import { EMPTY_LIVE, type LiveData } from '../engine/live';
 import { cardParts, OPEN_STATES, renderClock } from '../render/render';
+import type { AnalyticsEvent } from '../engine/analytics';
 import type { State } from '../engine/types';
 
 declare global {
@@ -15,6 +16,8 @@ const TICK_MS = 30_000;
 const LIVE_POLL_MS = 120_000;
 const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
+/** Wait for typing to settle before counting a search. */
+const SEARCH_TRACK_MS = 1_000;
 
 const byId = new Map(locations.map((l) => [l.id, l]));
 let live: LiveData = window.__LIVE__ ?? EMPTY_LIVE;
@@ -42,6 +45,24 @@ function writeJson(key: string, value: unknown): void {
 
 const $ = <T extends Element>(sel: string, root: ParentNode = document): T | null => root.querySelector<T>(sel);
 const $$ = <T extends Element>(sel: string, root: ParentNode = document): T[] => Array.from(root.querySelectorAll<T>(sel));
+
+/* Analytics -------------------------------------------------------------- */
+
+/**
+ * Fire-and-forget custom event to the Worker, which validates it and writes a
+ * Workers Analytics Engine data point. No PII: ids/categories are from our own
+ * dataset and search text never leaves the browser (only its length and hit count).
+ */
+function track(event: AnalyticsEvent): void {
+  try {
+    const body = JSON.stringify(event);
+    if (!navigator.sendBeacon?.('/api/event', body)) {
+      void fetch('/api/event', { method: 'POST', body, keepalive: true }).catch(() => undefined);
+    }
+  } catch {
+    /* analytics must never break the page */
+  }
+}
 
 /* Rendering --------------------------------------------------------------- */
 
@@ -123,7 +144,7 @@ function matches(card: HTMLElement): boolean {
   return true;
 }
 
-function applyFilters(): void {
+function applyFilters(): number {
   let visible = 0;
   for (const group of $$<HTMLElement>('.group')) {
     let groupVisible = 0;
@@ -140,6 +161,7 @@ function applyFilters(): void {
   if (empty) empty.hidden = visible > 0;
   const list = document.getElementById('list');
   if (list) list.dataset.cat = cat;
+  return visible;
 }
 
 /* Live data --------------------------------------------------------------- */
@@ -165,9 +187,18 @@ function init(): void {
   const openBtn = document.getElementById('open-only');
   const filters = $$<HTMLButtonElement>('.filter');
 
+  let searchTimer: ReturnType<typeof setTimeout> | undefined;
+  let trackedQuery = '';
   q?.addEventListener('input', () => {
     query = q.value.trim().toLowerCase();
-    applyFilters();
+    const results = applyFilters();
+    clearTimeout(searchTimer);
+    if (query && query !== trackedQuery) {
+      searchTimer = setTimeout(() => {
+        trackedQuery = query;
+        track({ type: 'search', length: query.length, results });
+      }, SEARCH_TRACK_MS);
+    }
   });
   q?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
@@ -182,6 +213,7 @@ function init(): void {
     openOnly = !openOnly;
     openBtn.setAttribute('aria-pressed', openOnly ? 'true' : 'false');
     applyFilters();
+    track({ type: 'filter', key: 'open_only', on: openOnly });
   });
 
   for (const f of filters) {
@@ -194,6 +226,7 @@ function init(): void {
         other.setAttribute('aria-pressed', active ? 'true' : 'false');
       }
       applyFilters();
+      track({ type: 'filter', key: 'category', value: cat });
       f.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
     });
     if ((f.dataset.cat ?? 'all') === cat) {
@@ -213,6 +246,16 @@ function init(): void {
     const card = btn.closest<HTMLElement>('.card');
     if (card?.dataset.id) togglePin(card.dataset.id);
   });
+
+  // A card expanding (tap or deep link) counts as a location view. `toggle` does not bubble, so capture it.
+  document.addEventListener(
+    'toggle',
+    (e) => {
+      const card = e.target as HTMLDetailsElement;
+      if (card.open && card.classList.contains('card') && card.dataset.id) track({ type: 'location_view', id: card.dataset.id });
+    },
+    true,
+  );
 
   // Deep link: /#loc-dewick opens that card.
   if (location.hash.startsWith('#loc-')) {

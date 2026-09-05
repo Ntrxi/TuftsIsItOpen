@@ -6,8 +6,24 @@ import { esc, renderClock, renderGroups, renderToolbar } from './render';
 /** Jumbo, the Tufts elephant (athletics logo; used here in an unofficial, non-commercial student project). */
 export const MARK_SVG = `<img class="mark" src="/jumbo.svg" width="40" height="44" alt="Jumbo the elephant" decoding="async">`;
 
-export function renderPage(locations: Location[], statuses: Status[], cal: Calendar, live: LiveData, at: Date): string {
+export interface PageOptions {
+  /** Cloudflare Web Analytics site token; omit or leave empty to render no beacon. */
+  beaconToken?: string;
+}
+
+export function renderPage(
+  locations: Location[],
+  statuses: Status[],
+  cal: Calendar,
+  live: LiveData,
+  at: Date,
+  opts: PageOptions = {},
+): string {
   const liveJson = JSON.stringify(live).replace(/</g, '\\u003c');
+  // Cloudflare Web Analytics beacon (cookie-less, no PII). The attribute is double-quoted, so esc() keeps it safe.
+  const beacon = opts.beaconToken
+    ? `\n<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="${esc(JSON.stringify({ token: opts.beaconToken }))}"></script>`
+    : '';
   const verified = DATA_VERIFIED ? fmtDate(DATA_VERIFIED) : 'recently';
   const liveSources = Object.entries(live.sources)
     .map(([k, v]) => `${k}: ${v}`)
@@ -56,7 +72,7 @@ export function renderPage(locations: Location[], statuses: Status[], cal: Calen
   </div>
   <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, and the shuttle tracker${liveSources ? ` (${esc(liveSources)})` : ''}. Always confirm before a special trip.</p>
 </footer>
-<script>window.__LIVE__=${liveJson};window.__RENDERED_AT__=${JSON.stringify(at.toISOString())};</script>
+<script>window.__LIVE__=${liveJson};window.__RENDERED_AT__=${JSON.stringify(at.toISOString())};</script>${beacon}
 </body>
 </html>`;
 }

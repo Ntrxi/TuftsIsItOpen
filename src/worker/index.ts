@@ -1,4 +1,5 @@
-import { calendar, locations } from '../data';
+import { CATEGORY_ORDER, calendar, locations } from '../data';
+import { toDataPoint, type EventContext } from '../engine/analytics';
 import { computeAll } from '../engine/status';
 import { EMPTY_LIVE, type LiveData } from '../engine/live';
 import { renderPage } from '../render/page';
@@ -6,7 +7,19 @@ import { fetchAllLive } from './live';
 
 export interface Env {
   ASSETS: Fetcher;
+  /** Workers Analytics Engine dataset for custom events (see `analytics_engine_datasets` in wrangler.jsonc). */
+  ANALYTICS?: AnalyticsEngineDataset;
+  /** Cloudflare Web Analytics site token. Empty string disables the beacon. */
+  CF_BEACON_TOKEN?: string;
 }
+
+/** Only known location ids and categories are ever written to Analytics Engine. */
+const EVENT_CONTEXT: EventContext = {
+  locations: new Map(locations.map((l) => [l.id, l.category])),
+  categories: new Set(CATEGORY_ORDER),
+};
+/** Upper bound on an event body; real events are well under 100 bytes. */
+const MAX_EVENT_BYTES = 512;
 
 /** How long a live snapshot is served before a background refresh is triggered. */
 const LIVE_FRESH_MS = 60_000;
@@ -99,7 +112,7 @@ export default {
       const now = new Date();
       const live = await getLive(ctx);
       const statuses = computeAll(locations, calendar, now, live.overrides);
-      const html = renderPage(locations, statuses, calendar, live, now);
+      const html = renderPage(locations, statuses, calendar, live, now, { beaconToken: env.CF_BEACON_TOKEN });
       return new Response(html, {
         headers: {
           'content-type': 'text/html; charset=utf-8',
@@ -142,6 +155,22 @@ export default {
           };
         }),
       });
+    }
+
+    if (path === '/api/event') {
+      if (request.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST' } });
+      const text = await request.text();
+      if (text.length > MAX_EVENT_BYTES) return new Response(null, { status: 413 });
+      let body: unknown;
+      try {
+        body = JSON.parse(text);
+      } catch {
+        return new Response(null, { status: 400 });
+      }
+      const point = toDataPoint(body, EVENT_CONTEXT);
+      if (!point) return new Response(null, { status: 400 });
+      env.ANALYTICS?.writeDataPoint(point);
+      return new Response(null, { status: 204 });
     }
 
     if (path === '/api/locations') {

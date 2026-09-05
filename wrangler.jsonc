@@ -7,5 +7,10 @@
     "directory": "./public",
     "binding": "ASSETS"
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  // Cloudflare Web Analytics (visitors, page views, referrers). Paste the site token from
+  // the dashboard here; it is public (it ships in the HTML), so it is not a secret.
+  "vars": { "CF_BEACON_TOKEN": "" },
+  // Workers Analytics Engine: privacy-safe custom events (location views, searches, filters).
+  "analytics_engine_datasets": [{ "binding": "ANALYTICS", "dataset": "tufts_is_it_open_events" }]
 }
