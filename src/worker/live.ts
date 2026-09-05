@@ -152,7 +152,8 @@ function nutrisliceDayOverride(day: NutrisliceDay): DateOverride | undefined {
   if (!hasFood && CLOSED_RE.test(text)) {
     return { from: day.date, hours: 'closed', note: `Closed: “${text}” (per Tufts Dining menu)` };
   }
-  return { from: day.date, hours: 'regular', note: `Tufts Dining notice: “${text}”` };
+  // Anything else is a notice: keep the scheduled hours and just show the text.
+  return { from: day.date, note: `Tufts Dining notice: “${text}”` };
 }
 
 async function nutrisliceOverrides(todayKey: string): Promise<Record<string, DateOverride[]>> {

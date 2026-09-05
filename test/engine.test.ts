@@ -212,6 +212,27 @@ describe('computeStatus', () => {
     expect(st.scheduleNote).toContain('Test');
   });
 
+  it('lets a note-only override annotate a day without changing its hours', () => {
+    // A dining notice must not replace orientation hours or a holiday closure.
+    const dewick = computeStatus(byId('dewick'), calendar, at('2026-09-06', '8:00'), {
+      dewick: [{ from: '2026-09-06', note: 'Tufts Dining notice: “Welcome back!”' }],
+    });
+    expect(dewick.state).toBe('open');
+    expect(dewick.today).toBe('7:30 AM – 9:00 PM');
+    expect(dewick.scheduleNote).toBe('Orientation / Labor Day hours · Tufts Dining notice: “Welcome back!”');
+    const hodgdon = computeStatus(byId('hodgdon'), calendar, at('2026-10-12', '12:00'), {
+      hodgdon: [{ from: '2026-10-12', note: 'Tufts Dining notice: “New menu”' }],
+    });
+    expect(hodgdon.state).toBe('closed');
+    expect(hodgdon.scheduleNote).toContain("Indigenous Peoples' Day");
+    // On a regular day the note shows but the day is not flagged as special hours.
+    const regular = computeStatus(byId('dewick'), calendar, at('2026-09-16', '12:00'), {
+      dewick: [{ from: '2026-09-16', note: 'Tufts Dining notice: “Taco day”' }],
+    });
+    expect(regular.isSpecial).toBe(false);
+    expect(regular.scheduleNote).toBe('Tufts Dining notice: “Taco day”');
+  });
+
   it('groups the week overview', () => {
     const st = computeStatus(byId('kindlevan'), calendar, at('2026-09-14', '12:00')); // Mon
     expect(st.week[0]).toEqual({ days: 'Today', text: '8:00 AM – 7:00 PM', isToday: true });
@@ -240,7 +261,7 @@ describe('data integrity', () => {
       expect(loc.links.source).toMatch(/^https?:\/\//);
       const weeks = [loc.hours, ...(loc.periods ?? []).map((p) => p.hours), ...(loc.overrides ?? []).map((o) => o.hours)];
       for (const w of weeks) {
-        if (typeof w === 'string') continue;
+        if (w === undefined || typeof w === 'string') continue;
         const days = Array.isArray(w[0]) ? (w as unknown[][]) : [w];
         for (const day of days) {
           for (const i of day as { start: number; end: number }[]) {

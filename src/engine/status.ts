@@ -31,9 +31,10 @@ function isWeek(h: unknown): h is WeekHours {
   return Array.isArray(h) && h.length === 7 && Array.isArray(h[0]);
 }
 
-function matchOverride(loc: Location, key: string, live?: DateOverride[]): DateOverride | undefined {
-  const all = [...(live ?? []), ...(loc.overrides ?? [])];
-  return all.find((o) => inRange(key, o.from, o.to ?? o.from));
+/** First matching hours override (live feed first, then static) and first matching note-only override. */
+function matchOverrides(loc: Location, key: string, live?: DateOverride[]): { hours?: DateOverride; notice?: DateOverride } {
+  const all = [...(live ?? []), ...(loc.overrides ?? [])].filter((o) => inRange(key, o.from, o.to ?? o.from));
+  return { hours: all.find((o) => o.hours !== undefined), notice: all.find((o) => o.hours === undefined) };
 }
 
 function findPeriod(cal: Calendar, key: string): CalendarPeriod | undefined {
@@ -48,6 +49,14 @@ function findPeriod(cal: Calendar, key: string): CalendarPeriod | undefined {
 
 /** Resolve which hours apply to a location on a given local date. */
 export function resolveDay(loc: Location, key: string, cal: Calendar, live?: DateOverride[]): ResolvedDay {
+  const { hours: ov, notice } = matchOverrides(loc, key, live);
+  const res = resolveDayHours(loc, key, cal, ov);
+  // A note-only override annotates the day without changing which hours apply.
+  if (!notice) return res;
+  return { ...res, note: res.note ? `${res.note} · ${notice.note}` : notice.note };
+}
+
+function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOverride | undefined): ResolvedDay {
   const dow = dowOf(key);
   const regular = (): ResolvedDay => {
     if (loc.hours === 'unknown') return { hours: 'unknown', source: 'unknown' };
@@ -56,13 +65,13 @@ export function resolveDay(loc: Location, key: string, cal: Calendar, live?: Dat
   };
 
   // 1. Specific-date overrides (live feed first, then static).
-  const ov = matchOverride(loc, key, live);
-  if (ov) {
-    if (ov.hours === 'regular') return { ...regular(), note: ov.note, source: 'override' };
-    if (ov.hours === 'closed') return { hours: [], note: ov.note, source: 'override' };
-    if (ov.hours === 'unknown') return { hours: 'unknown', note: ov.note, source: 'override' };
-    if (isWeek(ov.hours)) return { hours: ov.hours[dow] ?? [], note: ov.note, source: 'override' };
-    return { hours: ov.hours, note: ov.note, source: 'override' };
+  const h = ov?.hours;
+  if (ov && h !== undefined) {
+    if (h === 'regular') return { ...regular(), note: ov.note, source: 'override' };
+    if (h === 'closed') return { hours: [], note: ov.note, source: 'override' };
+    if (h === 'unknown') return { hours: 'unknown', note: ov.note, source: 'override' };
+    if (isWeek(h)) return { hours: h[dow] ?? [], note: ov.note, source: 'override' };
+    return { hours: h, note: ov.note, source: 'override' };
   }
 
   // 2. University holidays.

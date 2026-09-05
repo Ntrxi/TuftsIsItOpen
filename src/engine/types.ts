@@ -34,7 +34,8 @@ export interface DateOverride {
   from: string;
   /** YYYY-MM-DD, inclusive. Defaults to `from`. */
   to?: string;
-  hours: DayHours | WeekHours | 'closed' | 'unknown' | 'regular';
+  /** Omit to keep whatever hours would otherwise apply and only attach the note (e.g. a dining notice). */
+  hours?: DayHours | WeekHours | 'closed' | 'unknown' | 'regular';
   note: string;
 }
 

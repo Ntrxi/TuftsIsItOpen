@@ -15,13 +15,14 @@ describe('Nutrislice weekly menu parsing', () => {
 
   it('keeps regular hours when a notice is posted alongside a real menu', () => {
     const ov = nutrisliceDayOverride({ date: '2026-09-08', menu_items: [holiday('Welcome back!'), station('Grill'), food('Burger')] });
-    expect(ov?.hours).toBe('regular');
+    expect(ov?.hours).toBeUndefined();
     expect(ov?.note).toContain('Welcome back!');
   });
 
-  it('keeps regular hours for a notice that does not read as a closure', () => {
+  it('keeps scheduled hours for a notice that does not read as a closure', () => {
     const ov = nutrisliceDayOverride({ date: '2026-09-08', menu_items: [holiday('Menu coming soon')] });
-    expect(ov?.hours).toBe('regular');
+    expect(ov?.hours).toBeUndefined();
+    expect(ov?.note).toContain('Menu coming soon');
   });
 
   it('ignores ordinary menu days and empty days', () => {
