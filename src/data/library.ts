@@ -30,8 +30,9 @@ export const library: Location[] = [
       { period: 'fall-exams-2026', hours: 'regular' },
       {
         period: 'thanksgiving-2026',
-        hours: [[], [], [], [r('7:45am', '6pm')], [], [], []],
-        note: 'Thanksgiving recess hours',
+        // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
+        hours: [tischWeek[0], [], [], [r('7:45am', '6pm')], [], [], []],
+        note: 'Thanksgiving recess hours (confirm on the library calendar)',
       },
     ],
     overrides: [

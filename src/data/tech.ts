@@ -108,7 +108,8 @@ export const tech: Location[] = [
     breaks: 'unknown',
     periods: [
       { period: 'fall-exams-2026', hours: 'regular' },
-      { period: 'thanksgiving-2026', hours: [[], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours' },
+      // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
+      { period: 'thanksgiving-2026', hours: [[r('10am', '9pm')], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours (confirm on the library calendar)' },
     ],
     overrides: [
       { from: '2026-08-31', to: '2026-09-04', hours: [r('10am', '5pm')], note: 'Pre-semester hours' },

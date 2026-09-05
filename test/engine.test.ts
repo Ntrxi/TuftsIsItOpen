@@ -226,6 +226,16 @@ describe('computeStatus', () => {
     expect(sun.state).toBe('closed');
     expect(sun.detail).toBe('Opens 5:00 PM');
   });
+  it('reflects published Pax et Lox holiday closures and the Sunday after Thanksgiving', () => {
+    const pax = computeStatus(byId('pax-et-lox'), calendar, at('2026-09-21', '12:00'));
+    expect(pax.state).toBe('closed');
+    expect(pax.scheduleNote).toContain('Yom Kippur');
+    expect(computeStatus(byId('pax-et-lox'), calendar, at('2026-09-14', '12:00')).state).toBe('open');
+    const tisch = computeStatus(byId('tisch-library'), calendar, at('2026-11-29', '14:00'));
+    expect(tisch.state).toBe('open');
+    expect(computeStatus(byId('tisch-library'), calendar, at('2026-11-26', '14:00')).state).toBe('closed');
+  });
+
   it('applies live overrides ahead of static data', () => {
     const live = { dewick: [{ from: '2026-09-10', hours: 'closed' as const, note: 'Closed: “Test” (per Tufts Dining menu)' }] };
     const st = computeStatus(byId('dewick'), calendar, at('2026-09-10', '12:30'), live);

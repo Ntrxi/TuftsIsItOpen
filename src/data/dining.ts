@@ -204,9 +204,10 @@ export const dining: Location[] = [
     overrides: [
       { from: '2026-09-03', to: '2026-09-04', hours: [r('8am', '3pm')], note: 'Orientation hours' },
       { from: '2026-09-05', to: '2026-09-07', hours: 'closed', note: 'Closed Labor Day weekend' },
+      { from: '2026-09-10', hours: [r('8am', '6pm')], note: 'Open until 6 PM per the orientation-week hours table (regular Thursday close is 5 PM)' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/hotung-cafe', schedule: PREO_SRC },
-    verified: '2026-09-03',
+    verified: '2026-09-05',
     confidence: 'high',
   },
   {
@@ -266,11 +267,11 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [
       { from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' },
-      { from: '2026-09-21', hours: 'unknown', note: 'Yom Kippur: likely closed (holiday hours not yet published)' },
+      { from: '2026-09-21', hours: 'closed', note: 'Closed for Yom Kippur (per dining.tufts.edu)' },
     ],
-    links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/pax-et-lox-glatt-kosher-deli' },
-    note: 'Closes for Jewish holidays; the holiday schedule is posted on dining.tufts.edu each semester.',
-    verified: '2026-09-03',
+    links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/pax-et-lox-glatt-kosher-deli', schedule: 'https://dining.tufts.edu/hours/pax-et-lox-holiday-hours' },
+    note: 'Closes for Jewish holidays: Rosh Hashanah (Fri Sep 11) and Yom Kippur (Mon Sep 21) this fall; no closures for Sukkot.',
+    verified: '2026-09-05',
     confidence: 'high',
   },
   {
