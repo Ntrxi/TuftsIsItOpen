@@ -78,6 +78,17 @@ describe('resolveDay precedence', () => {
     const res = resolveDay(byId('grocery-shuttle'), '2027-05-31', calendar);
     expect(res.source).toBe('regular');
   });
+  it('does not report locations without published hours as closed for a holiday', () => {
+    // Bray is appointment-based and Halligan is card access; a holiday does not make them "Closed".
+    const bray = computeStatus(byId('bray-machine-shop'), calendar, at('2026-09-07', '12:00'));
+    expect(bray.state).toBe('appointment');
+    expect(bray.scheduleNote).toBeUndefined();
+    const halligan = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-07', '12:00'));
+    expect(halligan.state).toBe('special');
+    // Locations with real hours still close.
+    expect(computeStatus(byId('hodgdon'), calendar, at('2026-09-07', '12:00')).state).toBe('closed');
+  });
+
   it('applies named break periods', () => {
     const res = resolveDay(byId('health-service'), '2027-03-22', calendar); // spring break Monday
     expect(res.source).toBe('period');

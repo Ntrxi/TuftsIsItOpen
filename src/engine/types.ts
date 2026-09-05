@@ -72,7 +72,7 @@ export interface Location {
   access?: AccessMode;
   /** Regular academic-year hours. */
   hours: HoursSpec;
-  /** Behavior on university holidays. Default 'closed'. */
+  /** Behavior on university holidays. Default 'closed', or 'regular' when `hours` is 'unknown'. */
   holidays?: 'closed' | 'regular';
   /** Default behavior during calendar breaks when no `periods` entry matches. Default 'unknown'. */
   breaks?: 'closed' | 'unknown' | 'regular' | WeekHours;

@@ -74,9 +74,11 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
     return { hours: h, note: ov.note, source: 'override' };
   }
 
-  // 2. University holidays.
+  // 2. University holidays. A location with no published hours (card access, appointments) is
+  //    not reported "Closed for <holiday>" unless it opts in; its hours stay unknown.
   const holiday = cal.holidays.find((h) => h.date === key);
-  if (holiday && (loc.holidays ?? 'closed') === 'closed') {
+  const holidayRule = loc.holidays ?? (loc.hours === 'unknown' ? 'regular' : 'closed');
+  if (holiday && holidayRule === 'closed') {
     return { hours: [], note: `Closed for ${holiday.name}`, source: 'holiday' };
   }
 
