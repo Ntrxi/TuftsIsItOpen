@@ -105,17 +105,18 @@ async function libcalOverrides(todayKey: string): Promise<Record<string, DateOve
 
 /* Nutrislice (Tufts Dining closures) -------------------------------------- */
 
-const NUTRISLICE: { slug: string; menu: string; locId: string }[] = [
-  { slug: 'dewick-dining', menu: 'lunch', locId: 'dewick' },
-  { slug: 'carmichael-dining-hall', menu: 'lunch', locId: 'carmichael' },
-  { slug: 'commons-marketplace', menu: 'lunch', locId: 'commons' },
-  { slug: 'hodgdon-food-on-the-run', menu: 'lunch', locId: 'hodgdon' },
-  { slug: 'hotung-cafe', menu: 'lunch', locId: 'hotung' },
-  { slug: 'kindlevan-cafe', menu: 'daily', locId: 'kindlevan' },
-  { slug: 'mugar-cafe', menu: 'daily', locId: 'mugar-cafe' },
-  { slug: 'pax-et-lox-glatt-kosher-deli', menu: 'lunch', locId: 'pax-et-lox' },
-  { slug: 'tower-cafe', menu: 'daily', locId: 'tower-cafe' },
-  { slug: 'smfa', menu: 'lunch', locId: 'smfa-cafe' },
+/** Dining halls publish separate breakfast/lunch/dinner menus; cafés have a single menu. */
+const NUTRISLICE: { slug: string; menus: string[]; locId: string }[] = [
+  { slug: 'dewick-dining', menus: ['breakfast', 'lunch', 'dinner'], locId: 'dewick' },
+  { slug: 'carmichael-dining-hall', menus: ['breakfast', 'lunch', 'dinner'], locId: 'carmichael' },
+  { slug: 'commons-marketplace', menus: ['lunch'], locId: 'commons' },
+  { slug: 'hodgdon-food-on-the-run', menus: ['lunch'], locId: 'hodgdon' },
+  { slug: 'hotung-cafe', menus: ['lunch'], locId: 'hotung' },
+  { slug: 'kindlevan-cafe', menus: ['daily'], locId: 'kindlevan' },
+  { slug: 'mugar-cafe', menus: ['daily'], locId: 'mugar-cafe' },
+  { slug: 'pax-et-lox-glatt-kosher-deli', menus: ['lunch'], locId: 'pax-et-lox' },
+  { slug: 'tower-cafe', menus: ['daily'], locId: 'tower-cafe' },
+  { slug: 'smfa', menus: ['lunch'], locId: 'smfa-cafe' },
 ];
 
 /**
@@ -141,19 +142,37 @@ interface NutrisliceWeek {
   days?: NutrisliceDay[];
 }
 
+/** What one published menu says about a day. */
+interface MenuDay {
+  /** Notice or closure text, if any. */
+  text: string;
+  /** Whether real menu entries were published. */
+  hasFood: boolean;
+}
+
 const CLOSED_RE = /\b(clos|holiday|break|no service|not open)/i;
 
-/** Convert one menu day into a date override, or undefined when there is nothing to report. */
-function nutrisliceDayOverride(day: NutrisliceDay): DateOverride | undefined {
+/** Summarize one menu's day; undefined when nothing is published for it (no food and no notice). */
+function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
   const items = day.menu_items ?? [];
   const text = (items.find((i) => i.is_holiday && (i.text ?? '').trim())?.text ?? '').trim();
-  if (!day.date || !text) return undefined;
   const hasFood = items.some((i) => !i.is_holiday && i.food != null);
-  if (!hasFood && CLOSED_RE.test(text)) {
-    return { from: day.date, hours: 'closed', note: `Closed: “${text}” (per Tufts Dining menu)` };
-  }
-  // Anything else is a notice: keep the scheduled hours and just show the text.
-  return { from: day.date, note: `Tufts Dining notice: “${text}”` };
+  return text || hasFood ? { text, hasFood } : undefined;
+}
+
+/**
+ * Combine every published menu for a date into one override, or undefined when there is
+ * nothing to report. The day counts as closed only when every published menu is a closure
+ * notice with no food; a closure on some meals (e.g. "dinner closed for the food fair") keeps
+ * the scheduled hours and shows the text as a notice instead.
+ */
+function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | undefined {
+  const texts = [...new Set(menus.map((m) => m.text).filter(Boolean))];
+  if (!date || !texts.length) return undefined;
+  const quoted = texts.map((t) => `“${t}”`).join(', ');
+  const allClosed = menus.every((m) => m.text && !m.hasFood && CLOSED_RE.test(m.text));
+  if (allClosed) return { from: date, hours: 'closed', note: `Closed: ${quoted} (per Tufts Dining menu)` };
+  return { from: date, note: `Tufts Dining notice: ${quoted}` };
 }
 
 async function nutrisliceOverrides(todayKey: string): Promise<Record<string, DateOverride[]>> {
@@ -162,31 +181,34 @@ async function nutrisliceOverrides(todayKey: string): Promise<Record<string, Dat
   const weeks = [todayKey, addDays(todayKey, 7)];
   await Promise.all(
     NUTRISLICE.map(async (cfg) => {
-      const overrides: DateOverride[] = [];
-      for (const weekKey of weeks) {
-        const [y, m, d] = weekKey.split('-');
-        const url = `https://tufts.api.nutrislice.com/menu/api/weeks/school/${cfg.slug}/menu-type/${cfg.menu}/${y}/${m}/${d}/`;
-        let week: NutrisliceWeek;
-        try {
-          week = await getJson<NutrisliceWeek>(url);
-        } catch {
-          continue;
-        }
-        for (const day of week.days ?? []) {
-          if (!day?.date || day.date < todayKey) continue;
-          const ov = nutrisliceDayOverride(day);
-          if (ov) overrides.push(ov);
-        }
-      }
-      if (overrides.length) out[cfg.locId] = dedupe(overrides);
+      const byDate = new Map<string, MenuDay[]>();
+      await Promise.all(
+        cfg.menus.flatMap((menu) =>
+          weeks.map(async (weekKey) => {
+            const [y, m, d] = weekKey.split('-');
+            const url = `https://tufts.api.nutrislice.com/menu/api/weeks/school/${cfg.slug}/menu-type/${menu}/${y}/${m}/${d}/`;
+            let week: NutrisliceWeek;
+            try {
+              week = await getJson<NutrisliceWeek>(url);
+            } catch {
+              return;
+            }
+            for (const day of week.days ?? []) {
+              if (!day?.date || day.date < todayKey) continue;
+              const summary = readMenuDay(day);
+              if (summary) byDate.set(day.date, [...(byDate.get(day.date) ?? []), summary]);
+            }
+          }),
+        ),
+      );
+      const overrides = [...byDate]
+        .sort(([a], [b]) => (a < b ? -1 : 1))
+        .map(([date, menus]) => nutrisliceDayOverride(date, menus))
+        .filter((o): o is DateOverride => o !== undefined);
+      if (overrides.length) out[cfg.locId] = overrides;
     }),
   );
   return out;
-}
-
-function dedupe(list: DateOverride[]): DateOverride[] {
-  const seen = new Set<string>();
-  return list.filter((o) => (seen.has(o.from) ? false : (seen.add(o.from), true)));
 }
 
 /* Passio GO (shuttle vehicles) -------------------------------------------- */
@@ -265,5 +287,5 @@ export async function fetchAllLive(now: Date): Promise<LiveData> {
 }
 
 /** Exposed for tests. */
-export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, nutrisliceDayOverride };
+export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride };
 export type { Interval };

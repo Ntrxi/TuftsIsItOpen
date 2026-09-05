@@ -34,7 +34,7 @@ Unknown is a first-class state: if a break schedule has not been published, the 
 **Live feeds** (`src/worker/live.ts`), all best-effort with an edge cache and stale-while-revalidate:
 
 - Tisch, Ginn, Lilly, and the Digital Design Studio from the LibCal hours API
-- Tufts Dining closures and notices from the Nutrislice weekly menu API (bold `is_holiday` lines; the digest endpoint is not used because it omits weekends)
+- Tufts Dining closures and notices from the Nutrislice weekly menu API (bold `is_holiday` lines). Every meal menu is checked for the dining halls, and a day is closed only when all published menus say so. The digest endpoint is not used because it omits weekends.
 - Shuttle vehicle counts from the Passio GO tracker
 
 ## Develop
