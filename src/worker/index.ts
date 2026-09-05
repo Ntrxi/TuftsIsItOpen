@@ -59,7 +59,7 @@ const edgeCache = (): Cache => (caches as unknown as { default: Cache }).default
 async function refreshLive(ctx: ExecutionContext): Promise<LiveData> {
   if (inflight) return inflight;
   inflight = (async () => {
-    const data = await fetchAllLive(new Date());
+    const data = await fetchAllLive(new Date(), memory?.data);
     memory = { data, at: Date.now() };
     try {
       const cache = edgeCache();
@@ -98,7 +98,8 @@ async function getLive(ctx: ExecutionContext): Promise<LiveData> {
   try {
     return await refreshLive(ctx);
   } catch {
-    return memory?.data ?? EMPTY_LIVE;
+    // Whatever we still have is older than the freshness window: say so.
+    return memory ? { ...memory.data, sources: markStale(memory.data.sources) } : EMPTY_LIVE;
   }
 }
 

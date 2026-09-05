@@ -175,8 +175,15 @@ function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | u
   return { from: date, note: `Tufts Dining notice: ${quoted}` };
 }
 
-async function nutrisliceOverrides(todayKey: string): Promise<Record<string, DateOverride[]>> {
+interface NutrisliceResult {
+  overrides: Record<string, DateOverride[]>;
+  /** Location ids for which at least one menu request failed, so "no closure found" cannot be trusted. */
+  failed: string[];
+}
+
+async function nutrisliceOverrides(todayKey: string): Promise<NutrisliceResult> {
   const out: Record<string, DateOverride[]> = {};
+  const failed = new Set<string>();
   // Each call covers Sun–Sat of the week containing the date, so two calls span today through next week.
   const weeks = [todayKey, addDays(todayKey, 7)];
   await Promise.all(
@@ -191,6 +198,7 @@ async function nutrisliceOverrides(todayKey: string): Promise<Record<string, Dat
             try {
               week = await getJson<NutrisliceWeek>(url);
             } catch {
+              failed.add(cfg.locId);
               return;
             }
             for (const day of week.days ?? []) {
@@ -208,7 +216,7 @@ async function nutrisliceOverrides(todayKey: string): Promise<Record<string, Dat
       if (overrides.length) out[cfg.locId] = overrides;
     }),
   );
-  return out;
+  return { overrides: out, failed: [...failed] };
 }
 
 /* Passio GO (shuttle vehicles) -------------------------------------------- */
@@ -259,29 +267,56 @@ export interface ProviderResult {
   sources: LiveData['sources'];
 }
 
-export async function fetchAllLive(now: Date): Promise<LiveData> {
+/**
+ * Fetch every feed. When a feed fails and `previous` holds data for it, that data is kept and
+ * the source is reported as 'stale' rather than dropping closures the page was already showing.
+ */
+export async function fetchAllLive(now: Date, previous?: LiveData): Promise<LiveData> {
   const todayKey = toLocal(now).key;
   const [lib, nutri, passio] = await Promise.allSettled([libcalOverrides(todayKey), nutrisliceOverrides(todayKey), passioVehicles()]);
   const overrides: Record<string, DateOverride[]> = {};
   const sources: LiveData['sources'] = {};
 
+  const keepPrevious = (source: keyof LiveData['sources'] & string, ids: string[]): void => {
+    const had = previous && previous.sources[source] !== undefined && previous.sources[source] !== 'error';
+    if (had) for (const id of ids) if (previous!.overrides[id]) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!];
+    sources[source] = had ? 'stale' : 'error';
+  };
+
   if (lib.status === 'fulfilled') {
     Object.assign(overrides, lib.value);
     sources.library = 'ok';
-  } else sources.library = 'error';
+  } else {
+    keepPrevious(
+      'library',
+      LIBCAL_LOCATIONS.map((c) => c.locId),
+    );
+  }
 
-  if (nutri.status === 'fulfilled') {
-    for (const [id, list] of Object.entries(nutri.value)) {
+  if (nutri.status === 'fulfilled' && nutri.value.failed.length < NUTRISLICE.length) {
+    for (const [id, list] of Object.entries(nutri.value.overrides)) {
       overrides[id] = [...(overrides[id] ?? []), ...list];
     }
-    sources.dining = 'ok';
-  } else sources.dining = 'error';
+    // Locations whose menus could not all be read keep whatever the last snapshot showed for them.
+    const kept = previous && previous.sources.dining !== undefined && previous.sources.dining !== 'error' ? nutri.value.failed.filter((id) => previous.overrides[id]) : [];
+    for (const id of kept) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!];
+    sources.dining = kept.length ? 'stale' : 'ok';
+  } else {
+    keepPrevious(
+      'dining',
+      NUTRISLICE.map((c) => c.locId),
+    );
+  }
 
   let vehicles: Record<string, number> = {};
   if (passio.status === 'fulfilled') {
     vehicles = passio.value;
     sources.shuttles = 'ok';
-  } else sources.shuttles = 'error';
+  } else {
+    const had = previous && previous.sources.shuttles !== undefined && previous.sources.shuttles !== 'error';
+    if (had) vehicles = previous!.vehicles;
+    sources.shuttles = had ? 'stale' : 'error';
+  }
 
   return { fetchedAt: now.toISOString(), overrides, vehicles, sources };
 }
