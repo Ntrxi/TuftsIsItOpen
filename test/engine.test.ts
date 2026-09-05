@@ -89,6 +89,17 @@ describe('resolveDay precedence', () => {
     expect(computeStatus(byId('hodgdon'), calendar, at('2026-09-07', '12:00')).state).toBe('closed');
   });
 
+  it('keeps regular hours during finals unless a location lists the exam period', () => {
+    // Spring finals 2027: no location lists the period, so nothing may fall back to its break default.
+    for (const id of ['dewick', 'popup-pub', 'lets-talk', 'health-service', 'tisch-library', 'davis-shuttle']) {
+      expect(resolveDay(byId(id), '2027-05-10', calendar).source, id).toBe('regular');
+    }
+    const pub = computeStatus(byId('popup-pub'), calendar, at('2027-05-10', '12:00')); // Mon
+    expect(pub.state).toBe('closed');
+    expect(pub.detail).toBe('Opens Thu 6:00 PM');
+    expect(pub.scheduleNote).toBeUndefined();
+  });
+
   it('applies named break periods', () => {
     const res = resolveDay(byId('health-service'), '2027-03-22', calendar); // spring break Monday
     expect(res.source).toBe('period');
@@ -284,6 +295,17 @@ describe('calendar context', () => {
 });
 
 describe('data integrity', () => {
+  it('never lets an exam period fall back to a break default', () => {
+    for (const period of calendar.periods.filter((p) => p.kind === 'exams')) {
+      for (const loc of locations) {
+        if (loc.periods?.some((p) => p.period === period.id)) continue;
+        for (let key = period.from; key <= period.to; key = addDays(key, 1)) {
+          expect(resolveDay(loc, key, calendar).source, `${loc.id} on ${key}`).not.toBe('period');
+        }
+      }
+    }
+  });
+
   it('has unique ids and sane intervals', () => {
     const ids = new Set<string>();
     for (const loc of locations) {

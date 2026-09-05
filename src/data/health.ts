@@ -31,7 +31,6 @@ export const health: Location[] = [
     ],
     holidays: 'closed',
     breaks: breakWeek,
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     links: {
       source: 'https://students.tufts.edu/health-service/about/hours',
       schedule: 'https://students.tufts.edu/health-service/make-appointment/make-appointment',
@@ -52,7 +51,6 @@ export const health: Location[] = [
     hours: [[], officeDay, officeDay, officeDay, [r('1pm', '5pm')], officeDay, []],
     holidays: 'closed',
     breaks: breakWeek,
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     links: {
       source: 'https://students.tufts.edu/counseling-and-mental-health-service',
       schedule: 'https://students.tufts.edu/health-wellness/counseling-and-mental-health-service/making-appointment',

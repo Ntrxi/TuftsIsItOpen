@@ -20,7 +20,6 @@ export const tech: Location[] = [
     ],
     holidays: 'closed',
     breaks: 'unknown',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed with Tisch Library this weekend' },
     ],
@@ -50,7 +49,6 @@ export const tech: Location[] = [
     ],
     holidays: 'regular',
     breaks: 'unknown',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'unknown', note: 'Fall hours begin with classes on Sep 8' }],
     links: { source: 'https://nolop.org/hours/' },
     note: 'Fall 2026 hours are not posted yet. Shown hours are the typical semester pattern (about 9 AM – 11 PM daily, closing a little earlier Friday and Saturday nights).',
@@ -107,7 +105,6 @@ export const tech: Location[] = [
     holidays: 'closed',
     breaks: 'unknown',
     periods: [
-      { period: 'fall-exams-2026', hours: 'regular' },
       // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
       { period: 'thanksgiving-2026', hours: [[r('10am', '9pm')], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours (confirm on the library calendar)' },
     ],
@@ -174,7 +171,6 @@ export const tech: Location[] = [
     ],
     holidays: 'closed',
     breaks: 'closed',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [{ from: '2026-09-01', to: '2026-09-13', hours: 'unknown', note: 'Fall opening date is announced on Instagram @tuftscrafts' }],
     links: { source: 'https://tufts.presence.io/organization/crafts-center' },
     note: 'Hours are announced on Instagram each semester and vary; the posted pattern is unverified for fall 2026.',

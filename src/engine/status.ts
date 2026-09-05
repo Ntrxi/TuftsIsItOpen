@@ -82,11 +82,12 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
     return { hours: [], note: `Closed for ${holiday.name}`, source: 'holiday' };
   }
 
-  // 3. Named calendar periods (breaks, summer, exams).
+  // 3. Named calendar periods (breaks, summer, exams). Exams are part of the term, so hours stay
+  //    regular unless the location lists that exam period; `breaks` only applies to breaks/summer.
   const period = findPeriod(cal, key);
   if (period && period.kind !== 'term') {
     const specific = loc.periods?.find((p) => p.period === period.id);
-    const spec = specific?.hours ?? loc.breaks ?? (period.kind === 'exams' ? 'regular' : 'unknown');
+    const spec = specific?.hours ?? (period.kind === 'exams' ? 'regular' : (loc.breaks ?? 'unknown'));
     if (spec === 'regular') {
       return specific?.note ? { ...regular(), note: specific.note, source: 'period' } : regular();
     }

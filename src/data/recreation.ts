@@ -70,7 +70,6 @@ export const recreation: Location[] = [
     ],
     holidays: 'regular',
     breaks: 'unknown',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [
       { from: '2026-09-01', to: '2026-09-07', hours: 'unknown', note: 'Fall rec swim schedule starts Sep 8' },
       { from: '2026-10-31', hours: 'closed', note: 'No rec swim Oct 31' },

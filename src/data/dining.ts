@@ -40,7 +40,6 @@ const RETAIL_CLOSED_WEEK: PeriodHours[] = [
   { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
   { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
   { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer' },
-  { period: 'fall-exams-2026', hours: 'regular' },
 ];
 
 const dewickWeek: WeekHours = [
@@ -88,7 +87,6 @@ export const dining: Location[] = [
       { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
       { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
       { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer (Carmichael is the summer dining hall)' },
-      { period: 'fall-exams-2026', hours: 'regular' },
     ],
     overrides: [
       { from: '2026-09-03', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation hours' },
@@ -114,7 +112,6 @@ export const dining: Location[] = [
       { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
       { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
       { period: 'summer-2027', hours: 'unknown', note: 'Summer hours not published yet' },
-      { period: 'fall-exams-2026', hours: 'regular' },
     ],
     overrides: [
       { from: '2026-09-03', to: '2026-09-05', hours: 'closed', note: 'Closed due to a building issue; reopens for dinner Sun Sep 6 (per dining.tufts.edu)' },
@@ -147,7 +144,6 @@ export const dining: Location[] = [
       { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
       { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
       { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer' },
-      { period: 'fall-exams-2026', hours: 'regular' },
     ],
     overrides: [
       { from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Closed until Tue Sep 8 per the dining menu system (the orientation hours table lists 11 AM – 7 PM on Sep 6–7)' },
@@ -165,7 +161,6 @@ export const dining: Location[] = [
     hours: [[], [], [], [], [], [r('9pm', '12:30am', 'Late night')], [r('9pm', '12:30am', 'Late night')]],
     holidays: 'regular',
     breaks: 'closed',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [
       { from: '2026-09-01', to: '2026-09-24', hours: 'closed', note: 'Fall Late Night starts Fri Sep 25' },
       { from: '2026-10-09', to: '2026-10-10', hours: 'closed', note: 'No Late Night this weekend' },

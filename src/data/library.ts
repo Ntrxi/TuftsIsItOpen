@@ -27,7 +27,6 @@ export const library: Location[] = [
     holidays: 'closed',
     breaks: 'unknown',
     periods: [
-      { period: 'fall-exams-2026', hours: 'regular' },
       {
         period: 'thanksgiving-2026',
         // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
@@ -65,7 +64,6 @@ export const library: Location[] = [
     holidays: 'closed',
     breaks: 'unknown',
     periods: [
-      { period: 'fall-exams-2026', hours: 'regular' },
       {
         period: 'thanksgiving-2026',
         hours: [[r('10am', '11pm')], [], [], [r('8am', '5pm')], [], [], []],
@@ -106,7 +104,6 @@ export const library: Location[] = [
     ],
     holidays: 'closed',
     breaks: 'unknown',
-    periods: [{ period: 'fall-exams-2026', hours: 'regular' }],
     overrides: [
       { from: '2026-08-31', to: '2026-09-04', hours: [r('9am', '5pm')], note: 'Pre-semester hours' },
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed Labor Day weekend' },

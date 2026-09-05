@@ -19,7 +19,6 @@ const shuttleBreaks: PeriodHours[] = [
   { period: 'winter-2026', hours: 'unknown', note: 'Winter break schedule not posted yet (usually no service between finals and spring classes)' },
   { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break schedule not posted yet' },
   { period: 'summer-2027', hours: 'closed', note: 'No service over the summer; resumes with the fall semester' },
-  { period: 'fall-exams-2026', hours: 'regular' },
 ];
 
 const holidayUnknown: DateOverride[] = [

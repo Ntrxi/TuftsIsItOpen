@@ -74,7 +74,10 @@ export interface Location {
   hours: HoursSpec;
   /** Behavior on university holidays. Default 'closed', or 'regular' when `hours` is 'unknown'. */
   holidays?: 'closed' | 'regular';
-  /** Default behavior during calendar breaks when no `periods` entry matches. Default 'unknown'. */
+  /**
+   * Default behavior during calendar breaks and summer when no `periods` entry matches. Default
+   * 'unknown'. Exam periods are not breaks: hours stay regular unless listed in `periods`.
+   */
   breaks?: 'closed' | 'unknown' | 'regular' | WeekHours;
   /** Hours for specific named calendar periods. */
   periods?: PeriodHours[];
