@@ -104,6 +104,14 @@ export const library: Location[] = [
     ],
     holidays: 'closed',
     breaks: 'unknown',
+    periods: [
+      {
+        period: 'thanksgiving-2026',
+        // Same pattern as the other libraries (short Wednesday, closed Thu–Sat, regular Sunday); LibCal overrides this once published.
+        hours: [[r('12pm', '10pm')], [], [], [r('9am', '5pm')], [], [], []],
+        note: 'Thanksgiving recess hours (based on the other libraries; confirm on the library calendar)',
+      },
+    ],
     overrides: [
       { from: '2026-08-31', to: '2026-09-04', hours: [r('9am', '5pm')], note: 'Pre-semester hours' },
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed Labor Day weekend' },

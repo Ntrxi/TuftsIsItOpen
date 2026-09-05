@@ -72,7 +72,8 @@ export const health: Location[] = [
     breaks: 'closed',
     overrides: [
       { from: '2026-09-01', to: '2026-09-09', hours: 'closed', note: 'Fall drop-ins begin Thu Sep 10' },
-      { from: '2026-12-11', to: '2027-01-31', hours: 'closed', note: 'Fall drop-ins ended Dec 10; spring schedule TBA' },
+      { from: '2026-12-11', to: '2027-01-19', hours: 'closed', note: 'Fall drop-ins ended Dec 10' },
+      { from: '2027-01-20', to: '2027-05-14', hours: 'unknown', note: 'Spring drop-in schedule not announced yet' },
     ],
     links: {
       source: 'https://students.tufts.edu/counseling-and-mental-health-service/services/lets-talk',

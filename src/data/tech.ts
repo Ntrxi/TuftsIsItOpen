@@ -132,7 +132,8 @@ export const tech: Location[] = [
     breaks: 'closed',
     overrides: [
       { from: '2026-09-01', to: '2026-09-24', hours: 'closed', note: 'Drop-in hours start Fri Sep 25' },
-      { from: '2026-12-13', to: '2027-01-31', hours: 'closed', note: 'Fall drop-ins ended Dec 12; spring schedule TBA' },
+      { from: '2026-12-13', to: '2027-01-19', hours: 'closed', note: 'Fall drop-ins ended Dec 12' },
+      { from: '2027-01-20', to: '2027-05-14', hours: 'unknown', note: 'Spring drop-in schedule not announced yet' },
     ],
     links: {
       source: 'https://tischlibrary.tufts.edu/our-locations/also-tisch/digital-design-studio-dds/3d-printing/request',

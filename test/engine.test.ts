@@ -91,7 +91,7 @@ describe('resolveDay precedence', () => {
 
   it('keeps regular hours during finals unless a location lists the exam period', () => {
     // Spring finals 2027: no location lists the period, so nothing may fall back to its break default.
-    for (const id of ['dewick', 'popup-pub', 'lets-talk', 'health-service', 'tisch-library', 'davis-shuttle']) {
+    for (const id of ['dewick', 'popup-pub', 'crafts-center', 'health-service', 'tisch-library', 'davis-shuttle']) {
       expect(resolveDay(byId(id), '2027-05-10', calendar).source, id).toBe('regular');
     }
     const pub = computeStatus(byId('popup-pub'), calendar, at('2027-05-10', '12:00')); // Mon
@@ -270,6 +270,24 @@ describe('computeStatus', () => {
     const tisch = computeStatus(byId('tisch-library'), calendar, at('2026-11-29', '14:00'));
     expect(tisch.state).toBe('open');
     expect(computeStatus(byId('tisch-library'), calendar, at('2026-11-26', '14:00')).state).toBe('closed');
+  });
+
+  it('reports unannounced spring schedules as unknown rather than resuming the fall pattern', () => {
+    const dec = computeStatus(byId('commons-late-night'), calendar, at('2026-12-20', '12:00'));
+    expect(dec.state).toBe('closed');
+    expect(dec.detail).toBe('Hours not published from Wed');
+    for (const id of ['commons-late-night', 'lets-talk', 'dds-laser']) {
+      const st = computeStatus(byId(id), calendar, at('2027-02-05', '21:30')); // first Friday of spring classes
+      expect(st.state, id).toBe('unknown');
+      expect(st.detail, id).toContain('not announced');
+    }
+  });
+
+  it('gives Lilly the same Thanksgiving pattern as the other libraries', () => {
+    expect(computeStatus(byId('lilly-music-library'), calendar, at('2026-11-26', '14:00')).state).toBe('closed');
+    const sun = computeStatus(byId('lilly-music-library'), calendar, at('2026-11-29', '14:00'));
+    expect(sun.state).toBe('open');
+    expect(sun.scheduleNote).toContain('confirm');
   });
 
   it('applies live overrides ahead of static data', () => {
