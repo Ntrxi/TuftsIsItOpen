@@ -39,4 +39,5 @@ export const calendar: Calendar = {
     { id: 'spring-exams-2027', name: 'Spring finals', from: '2027-05-04', to: '2027-05-14', kind: 'exams' },
     { id: 'summer-2027', name: 'Summer', from: '2027-05-15', to: '2027-08-31', kind: 'summer' },
   ],
+  through: '2027-08-31',
 };

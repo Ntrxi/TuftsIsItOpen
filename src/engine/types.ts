@@ -117,6 +117,8 @@ export interface CalendarPeriod {
 export interface Calendar {
   holidays: Holiday[];
   periods: CalendarPeriod[];
+  /** YYYY-MM-DD, inclusive: the last date the calendar covers. Later dates resolve to unknown hours. */
+  through: string;
 }
 
 export type State =

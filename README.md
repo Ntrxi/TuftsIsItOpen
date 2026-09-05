@@ -24,8 +24,9 @@ test/         vitest suite for the engine and data integrity
 1. Live overrides from feeds (library calendar, dining menu system)
 2. Static date overrides (Labor Day, orientation week, one-off closures)
 3. University holidays (a location can opt out with `holidays: 'regular'`)
-4. Named calendar periods: Thanksgiving, winter break, spring break, summer, finals
-5. Regular weekly hours
+4. Dates past the loaded calendar (`through` in `src/data/calendar.ts`) are unknown, except for locations with `breaks: 'regular'`
+5. Named calendar periods: Thanksgiving, winter break, spring break, summer (finals keep regular hours unless listed)
+6. Regular weekly hours
 
 Hours are minutes since local midnight; an `end` past 1440 means overnight (Tisch until 4 AM, the Friday shuttle until 2 AM). Split hours (lunch closures, morning/evening shuttle windows) are separate intervals with optional labels (meal periods, "Tufts ID only", route names).
 

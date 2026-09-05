@@ -109,6 +109,22 @@ describe('resolveDay precedence', () => {
     const res = resolveDay(byId('tisch-library'), '2027-01-05', calendar); // winter break
     expect(res.hours).toBe('unknown');
   });
+  it('does not guess hours past the loaded calendar', () => {
+    const after = addDays(calendar.through, 1);
+    const dewick = computeStatus(byId('dewick'), calendar, at(after, '12:00'));
+    expect(dewick.state).toBe('unknown');
+    expect(dewick.detail).toBe('Hours after Aug 31, 2027 not published yet');
+    expect(computeStatus(byId('popup-pub'), calendar, at(after, '12:00')).state).toBe('unknown');
+    // Year-round services that never follow the academic calendar keep their hours.
+    expect(resolveDay(byId('saferide'), after, calendar).source).toBe('regular');
+    expect(resolveDay(byId('tufts-post-office'), after, calendar).source).toBe('regular');
+    // The last covered day still resolves normally, and the lookahead stops at the edge.
+    const last = computeStatus(byId('dewick'), calendar, at(calendar.through, '12:00'));
+    expect(last.state).toBe('closed');
+    expect(last.detail).toBe('Hours not published for tomorrow');
+    expect(calendarContext(calendar, at(after, '12:00')).label).toBe('Calendar not loaded past Aug 31, 2027');
+  });
+
   it('post office follows federal holidays not Tufts holidays', () => {
     expect(resolveDay(byId('tufts-post-office'), '2026-11-11', calendar).hours).toEqual([]); // Veterans Day: closed
     expect(resolveDay(byId('tufts-post-office'), '2026-10-12', calendar).hours).toEqual([]); // Columbus Day: closed

@@ -82,7 +82,14 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
     return { hours: [], note: `Closed for ${holiday.name}`, source: 'holiday' };
   }
 
-  // 3. Named calendar periods (breaks, summer, exams). Exams are part of the term, so hours stay
+  // 3. Past the loaded calendar nothing is known: next year's breaks and holidays are not in the
+  //    data yet. Only locations whose hours never follow the calendar (`breaks: 'regular'`) keep them.
+  if (key > cal.through) {
+    if (loc.breaks === 'regular') return regular();
+    return { hours: 'unknown', note: `Hours after ${fmtLongDate(cal.through)} not published yet`, source: 'period' };
+  }
+
+  // 4. Named calendar periods (breaks, summer, exams). Exams are part of the term, so hours stay
   //    regular unless the location lists that exam period; `breaks` only applies to breaks/summer.
   const period = findPeriod(cal, key);
   if (period && period.kind !== 'term') {
@@ -99,6 +106,12 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
   }
 
   return regular();
+}
+
+/** "Aug 31, 2027" for a date key. */
+function fmtLongDate(key: string): string {
+  const m = Number(key.slice(5, 7));
+  return `${MONTHS[m - 1]} ${Number(key.slice(8, 10))}, ${key.slice(0, 4)}`;
 }
 
 function shift(intervals: Interval[], offset: number): Interval[] {
@@ -306,6 +319,7 @@ export function computeAll(locations: Location[], cal: Calendar, at: Date, live?
 /** Human description of the calendar context for a date: "Fall semester", "Thanksgiving recess", "Labor Day". */
 export function calendarContext(cal: Calendar, at: Date): { label: string; kind: CalendarPeriod['kind'] | 'holiday' | 'none' } {
   const now = toLocal(at);
+  if (now.key > cal.through) return { label: `Calendar not loaded past ${fmtLongDate(cal.through)}`, kind: 'none' };
   const holiday = cal.holidays.find((h) => h.date === now.key);
   if (holiday) return { label: holiday.name, kind: 'holiday' };
   const period = findPeriod(cal, now.key);
