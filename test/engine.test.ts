@@ -81,10 +81,10 @@ describe('resolveDay precedence', () => {
   it('does not report locations without published hours as closed for a holiday', () => {
     // Bray is appointment-based and Halligan is card access; a holiday does not make them "Closed".
     const bray = computeStatus(byId('bray-machine-shop'), calendar, at('2026-09-07', '12:00'));
-    expect(bray.state).toBe('appointment');
+    expect(bray.label).toBe('Appointment only');
     expect(bray.scheduleNote).toBeUndefined();
     const halligan = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-07', '12:00'));
-    expect(halligan.state).toBe('special');
+    expect(halligan.label).toBe('Special access');
     // Locations with real hours still close.
     expect(computeStatus(byId('hodgdon'), calendar, at('2026-09-07', '12:00')).state).toBe('closed');
   });
@@ -230,9 +230,18 @@ describe('computeStatus', () => {
     expect(st.detail).toContain('Sep 8');
   });
 
-  it('reports special access for facilities without public hours', () => {
-    const st = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-10', '12:00'));
-    expect(st.state).toBe('special');
+  it('names the access model for facilities without public hours but never counts them as open', () => {
+    for (const time of ['12:00', '3:00']) {
+      const halligan = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-10', time));
+      expect(halligan.state).toBe('unknown');
+      expect(halligan.label).toBe('Special access');
+      expect(halligan.detail).toBe('No posted hours; see details');
+      const bray = computeStatus(byId('bray-machine-shop'), calendar, at('2026-09-10', time));
+      expect(bray.state).toBe('unknown');
+      expect(bray.label).toBe('Appointment only');
+    }
+    // A location with published hours and an access model still reads as available during them.
+    expect(computeStatus(byId('health-service'), calendar, at('2026-09-10', '15:00')).state).toBe('appointment');
   });
 
   it('closes over Thanksgiving and reopens Sunday dinner for dining halls', () => {

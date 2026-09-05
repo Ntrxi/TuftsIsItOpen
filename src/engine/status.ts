@@ -234,19 +234,15 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
   };
 
   if (todayRes.hours === 'unknown') {
-    // Facilities with no published hours but a known access model (card access, appointments).
-    const accessState: State | undefined =
-      loc.hours === 'unknown' && loc.access === 'special'
-        ? 'special'
-        : loc.hours === 'unknown' && loc.access === 'appointment'
-          ? 'appointment'
-          : undefined;
-    const state = accessState ?? 'unknown';
+    // Nothing is published for today. A facility with a known access model (card access,
+    // appointments) is labelled with it, but the state stays 'unknown': nothing is claimed to be
+    // open, so the card is not counted by the Open-now filter at 3 AM or on a holiday.
+    const access = loc.hours === 'unknown' && (loc.access === 'special' || loc.access === 'appointment') ? loc.access : undefined;
     return {
       ...base,
-      state,
-      label: stateLabel(state),
-      detail: todayRes.note ?? (accessState ? 'No posted hours; see details' : 'Check the official page for hours'),
+      state: 'unknown',
+      label: stateLabel(access ?? 'unknown'),
+      detail: todayRes.note ?? (access ? 'No posted hours; see details' : 'Check the official page for hours'),
       today: 'Hours not published',
       todayPeriods: [],
     };
