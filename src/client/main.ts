@@ -26,6 +26,26 @@ let cat = readJson<string>(LS_CAT) ?? 'all';
 let query = '';
 let openOnly = false;
 
+/* Clock ------------------------------------------------------------------- */
+
+/**
+ * Statuses are computed on the device, so a wrong device clock would show the wrong answer.
+ * The server's time (the render timestamp, then the Date header of live responses) corrects it.
+ * Either may come from a cache up to ~90 s old, so only a clearly larger skew is applied.
+ */
+const SKEW_THRESHOLD_MS = 3 * 60_000;
+let clockSkewMs = 0;
+
+function noteServerTime(iso: string | null | undefined): void {
+  const server = iso ? Date.parse(iso) : NaN;
+  if (!Number.isFinite(server)) return;
+  const skew = server - Date.now();
+  clockSkewMs = Math.abs(skew) > SKEW_THRESHOLD_MS ? skew : 0;
+}
+
+/** The current instant, on the server's clock. */
+const now = (): Date => new Date(Date.now() + clockSkewMs);
+
 function readJson<T>(key: string): T | undefined {
   try {
     const raw = localStorage.getItem(key);
@@ -67,8 +87,8 @@ function track(event: AnalyticsEvent): void {
 /* Rendering --------------------------------------------------------------- */
 
 function refresh(): void {
-  const now = new Date();
-  const statuses = computeAll(locations, calendar, now, live.overrides);
+  const at = now();
+  const statuses = computeAll(locations, calendar, at, live.overrides);
   for (const st of statuses) {
     const card = document.getElementById(`loc-${st.id}`);
     const loc = byId.get(st.id);
@@ -82,7 +102,7 @@ function refresh(): void {
     syncPinButton(card);
   }
   const clock = document.getElementById('clock');
-  if (clock) clock.innerHTML = renderClock(now, calendar);
+  if (clock) clock.innerHTML = renderClock(at, calendar);
   applyFilters();
 }
 
@@ -170,6 +190,7 @@ async function pollLive(): Promise<void> {
   try {
     const res = await fetch('/api/live', { headers: { accept: 'application/json' } });
     if (!res.ok) return;
+    noteServerTime(res.headers.get('date'));
     const data = (await res.json()) as LiveData;
     if (data && typeof data === 'object' && data.overrides) {
       live = data;
@@ -183,6 +204,7 @@ async function pollLive(): Promise<void> {
 /* Wiring ------------------------------------------------------------------ */
 
 function init(): void {
+  noteServerTime(window.__RENDERED_AT__);
   const q = document.getElementById('q') as HTMLInputElement | null;
   const openBtn = document.getElementById('open-only');
   const filters = $$<HTMLButtonElement>('.filter');
@@ -287,7 +309,7 @@ function init(): void {
 
   // If the server-rendered snapshot is old (cached), pull fresh live data now.
   const renderedAt = window.__RENDERED_AT__ ? Date.parse(window.__RENDERED_AT__) : 0;
-  if (!renderedAt || Date.now() - renderedAt > 60_000) void pollLive();
+  if (!renderedAt || now().getTime() - renderedAt > 60_000) void pollLive();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
