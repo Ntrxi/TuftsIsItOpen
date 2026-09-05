@@ -96,6 +96,6 @@ Always sum `_sample_interval` rather than `COUNT(*)`, because Analytics Engine s
 
 ## Updating hours
 
-Edit the relevant file in `src/data/`. Each location records its official `links.source`, a `verified` date, and a `confidence`. Locations marked `low` show an *Unverified* chip. When Tufts publishes break schedules, add them as `periods` entries keyed by the ids in `src/data/calendar.ts`.
+Edit the relevant file in `src/data/`. Each location records its official `links.source`, a `verified` date, and a `confidence`. Locations marked `low` show an *Unverified* chip and `medium` a *Confirm hours* chip. When Tufts publishes break schedules, add them as `periods` entries keyed by the ids in `src/data/calendar.ts`.
 
 Unofficial student project by Aaron Chung, not affiliated with Tufts University. The Jumbo logo (`public/jumbo.svg` and the app icons) is a Tufts University trademark, used here for identification in a non-commercial student project.

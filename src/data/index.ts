@@ -23,5 +23,7 @@ export const CATEGORY_META: Record<Category, { label: string; short: string; ico
 
 export const locations: Location[] = [...dining, ...library, ...recreation, ...mail, ...health, ...tech, ...transit];
 
-/** Last date any hours in the dataset were verified against a source. */
-export const DATA_VERIFIED = locations.reduce((max, l) => (l.verified && l.verified > max ? l.verified : max), '');
+const verifiedDates = locations.flatMap((l) => (l.verified ? [l.verified] : [])).sort();
+
+/** Oldest and newest dates on which hours in the dataset were checked against a source. */
+export const DATA_VERIFIED = verifiedDates.length ? { earliest: verifiedDates[0]!, latest: verifiedDates[verifiedDates.length - 1]! } : undefined;

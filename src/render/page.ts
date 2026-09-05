@@ -24,7 +24,7 @@ export function renderPage(
   const beacon = opts.beaconToken
     ? `\n<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="${esc(JSON.stringify({ token: opts.beaconToken }))}"></script>`
     : '';
-  const verified = DATA_VERIFIED ? fmtDate(DATA_VERIFIED) : 'recently';
+  const verified = DATA_VERIFIED ? fmtDateRange(DATA_VERIFIED.earliest, DATA_VERIFIED.latest) : 'recently';
   const liveSources = Object.entries(live.sources)
     .map(([k, v]) => `${k}: ${v}`)
     .join(', ');
@@ -77,7 +77,14 @@ export function renderPage(
 </html>`;
 }
 
-function fmtDate(key: string): string {
-  const [y, m, d] = key.split('-').map(Number) as [number, number, number];
-  return `${['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][m - 1]} ${d}, ${y}`;
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "Sep 5, 2026", "Sep 3–5, 2026", "Aug 30 – Sep 5, 2026", or "Dec 30, 2026 – Jan 2, 2027". */
+export function fmtDateRange(from: string, to: string): string {
+  const [y1, m1, d1] = from.split('-').map(Number) as [number, number, number];
+  const [y2, m2, d2] = to.split('-').map(Number) as [number, number, number];
+  if (y1 !== y2) return `${MONTHS[m1 - 1]} ${d1}, ${y1} – ${MONTHS[m2 - 1]} ${d2}, ${y2}`;
+  if (m1 !== m2) return `${MONTHS[m1 - 1]} ${d1} – ${MONTHS[m2 - 1]} ${d2}, ${y2}`;
+  if (d1 !== d2) return `${MONTHS[m1 - 1]} ${d1}–${d2}, ${y2}`;
+  return `${MONTHS[m1 - 1]} ${d1}, ${y1}`;
 }
