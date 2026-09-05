@@ -31,10 +31,20 @@ function isWeek(h: unknown): h is WeekHours {
   return Array.isArray(h) && h.length === 7 && Array.isArray(h[0]);
 }
 
-/** First matching hours override (live feed first, then static) and first matching note-only override. */
+/** Live hours precede static hours; explicit priority wins within each layer. Ties fail closed. */
 function matchOverrides(loc: Location, key: string, live?: DateOverride[]): { hours?: DateOverride; notice?: DateOverride } {
-  const all = [...(live ?? []), ...(loc.overrides ?? [])].filter((o) => inRange(key, o.from, o.to ?? o.from));
-  return { hours: all.find((o) => o.hours !== undefined), notice: all.find((o) => o.hours === undefined) };
+  const matching = (list: DateOverride[]) => list.filter((o) => inRange(key, o.from, o.to ?? o.from));
+  const runtime = matching(live ?? []);
+  const staticMatches = matching(loc.overrides ?? []);
+  const candidates = (runtime.some((o) => o.hours !== undefined) ? runtime : staticMatches)
+    .filter((o) => o.hours !== undefined).sort((a, b) => (b.priority ?? 0) - (a.priority ?? 0));
+  const first = candidates[0];
+  const conflict = first && candidates[1] && (first.priority ?? 0) === (candidates[1].priority ?? 0);
+  const notes = [...new Set([...runtime, ...staticMatches].filter((o) => o.hours === undefined).map((o) => o.note))].sort();
+  return {
+    hours: conflict ? { from: key, hours: 'unknown', note: 'Conflicting schedule overrides; check the official sources' } : first,
+    notice: notes.length ? { from: key, note: notes.join(' · ') } : undefined,
+  };
 }
 
 function findPeriod(cal: Calendar, key: string): CalendarPeriod | undefined {
@@ -58,8 +68,14 @@ export function resolveDay(loc: Location, key: string, cal: Calendar, live?: Dat
 
 function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOverride | undefined): ResolvedDay {
   const dow = dowOf(key);
+  const uncertain = (confidence: Location['confidence']) => confidence === 'low' || confidence === 'medium';
+  if (loc.sourceConflict) return { hours: 'unknown', source: 'unknown', note: loc.sourceConflict };
   const regular = (): ResolvedDay => {
+    if (key > cal.through || (loc.validThrough && key > loc.validThrough)) {
+      return { hours: 'unknown', source: 'unknown', note: 'Current schedule coverage has ended; check the official page' };
+    }
     if (loc.hours === 'unknown') return { hours: 'unknown', source: 'unknown' };
+    if (uncertain(loc.confidence)) return { hours: 'unknown', source: 'unknown', note: 'Schedule is unconfirmed; check the official page' };
     if (loc.hours === 'closed') return { hours: [], source: 'regular' };
     return { hours: loc.hours[dow] ?? [], source: 'regular' };
   };
@@ -67,12 +83,15 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
   // 1. Specific-date overrides (live feed first, then static).
   const h = ov?.hours;
   if (ov && h !== undefined) {
+    if (uncertain(ov.confidence)) return { hours: 'unknown', source: 'override', note: ov.note };
     if (h === 'regular') return { ...regular(), note: ov.note, source: 'override' };
     if (h === 'closed') return { hours: [], note: ov.note, source: 'override' };
     if (h === 'unknown') return { hours: 'unknown', note: ov.note, source: 'override' };
     if (isWeek(h)) return { hours: h[dow] ?? [], note: ov.note, source: 'override' };
     return { hours: h, note: ov.note, source: 'override' };
   }
+
+  if (uncertain(loc.confidence)) return regular();
 
   // 2. University holidays. A location with no published hours (card access, appointments) is
   //    not reported "Closed for <holiday>" unless it opts in; its hours stay unknown.
@@ -83,9 +102,8 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
   }
 
   // 3. Past the loaded calendar nothing is known: next year's breaks and holidays are not in the
-  //    data yet. Only locations whose hours never follow the calendar (`breaks: 'regular'`) keep them.
+  //    data yet. Break behavior is not permission to extend calendar coverage.
   if (key > cal.through) {
-    if (loc.breaks === 'regular') return regular();
     return { hours: 'unknown', note: `Hours after ${fmtLongDate(cal.through)} not published yet`, source: 'period' };
   }
 
@@ -94,6 +112,7 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
   const period = findPeriod(cal, key);
   if (period && period.kind !== 'term') {
     const specific = loc.periods?.find((p) => p.period === period.id);
+    if (uncertain(specific?.confidence)) return { hours: 'unknown', source: 'period', note: specific?.note ?? 'Unconfirmed period hours' };
     const spec = specific?.hours ?? (period.kind === 'exams' ? 'regular' : (loc.breaks ?? 'unknown'));
     if (spec === 'regular') {
       return specific?.note ? { ...regular(), note: specific.note, source: 'period' } : regular();
@@ -255,7 +274,7 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
   // Effective intervals relative to today's midnight, including yesterday's overnight spill.
   const raw = [...shift(yesterdayHours, -1440), ...todayHours];
   const todaySpans = mergeContiguous(todayHours);
-  const spans = [...shift(mergeContiguous(yesterdayHours), -1440), ...todaySpans].filter((s) => s.end > 0);
+  const spans = mergeContiguous([...shift(yesterdayHours, -1440), ...todayHours]).filter((s) => s.end > 0);
   const span = spans.find((s) => s.start <= m && m < s.end);
 
   const todayText = fmtDay(todayHours);
@@ -271,7 +290,7 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
     let state: State;
     if (isTransit) state = 'running';
     else if (loc.access === 'appointment') state = 'appointment';
-    else if (loc.access === 'special') state = 'special';
+    else if (loc.access === 'special' || (loc.id === 'tisch-library' && period && period.label !== 'Open to public')) state = 'special';
     else state = minutesToEnd <= closingSoon ? 'closing_soon' : 'open';
 
     const endTime = fmtTime(span.end);

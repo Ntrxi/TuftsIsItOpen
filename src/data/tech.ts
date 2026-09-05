@@ -27,8 +27,9 @@ export const tech: Location[] = [
       source: 'https://access.tufts.edu/tts-walk-help-desk-returns-tisch-library-beginning-august-10',
       schedule: 'https://it.tufts.edu/walk-support-locations',
     },
-    note: 'Hours from the Aug 2026 announcement; the older it.tufts.edu page lists different times.',
-    verified: '2026-09-03',
+    sourceConflict: 'Official TTS sources disagree on walk-up hours; confirm with TTS at 617-627-3376.',
+    note: 'The Aug 6, 2026 announcement lists Mon–Thu 9 AM–9 PM, Fri 9 AM–5 PM, Sat 10 AM–5 PM, Sun 10 AM–9 PM. The IT locations page instead lists Sun–Thu 9 AM–11 PM and Fri–Sat 9 AM–5 PM.',
+    verified: '2026-09-05',
     confidence: 'medium',
   },
   {
@@ -38,21 +39,13 @@ export const tech: Location[] = [
     building: 'Science & Engineering Complex, 200 College Ave (under the main stairs)',
     description:
       'Open makerspace for anyone with a Tufts ID. Tool-specific safety training is required for the laser cutter, 3D printers, soldering, and the supervised woodshop "red zone".',
-    hours: [
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-      [r('9am', '11pm')],
-    ],
+    hours: 'unknown',
     holidays: 'regular',
     breaks: 'unknown',
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'unknown', note: 'Fall hours begin with classes on Sep 8' }],
     links: { source: 'https://nolop.org/hours/' },
-    note: 'Fall 2026 hours are not posted yet. Shown hours are the typical semester pattern (about 9 AM – 11 PM daily, closing a little earlier Friday and Saturday nights).',
-    verified: '2026-09-03',
+    note: 'The hours page still lists summer hours ending Aug 7. It mentions an 11 PM semester close except Saturday, but does not publish a complete fall schedule. Confirm with Nolop.',
+    verified: '2026-09-05',
     confidence: 'low',
   },
   {
@@ -106,7 +99,7 @@ export const tech: Location[] = [
     breaks: 'unknown',
     periods: [
       // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
-      { period: 'thanksgiving-2026', hours: [[r('10am', '9pm')], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours (confirm on the library calendar)' },
+      { period: 'thanksgiving-2026', confidence: 'low', hours: [[r('10am', '9pm')], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours (confirm on the library calendar)' },
     ],
     overrides: [
       { from: '2026-08-31', to: '2026-09-04', hours: [r('10am', '5pm')], note: 'Pre-semester hours' },

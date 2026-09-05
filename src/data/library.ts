@@ -31,6 +31,7 @@ export const library: Location[] = [
         period: 'thanksgiving-2026',
         // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
         hours: [tischWeek[0], [], [], [r('7:45am', '6pm')], [], [], []],
+        confidence: 'low',
         note: 'Thanksgiving recess hours (confirm on the library calendar)',
       },
     ],
@@ -104,15 +105,13 @@ export const library: Location[] = [
     ],
     holidays: 'closed',
     breaks: 'unknown',
-    periods: [
-      {
-        period: 'thanksgiving-2026',
-        // Same pattern as the other libraries (short Wednesday, closed Thu–Sat, regular Sunday); LibCal overrides this once published.
-        hours: [[r('12pm', '10pm')], [], [], [r('9am', '5pm')], [], [], []],
-        note: 'Thanksgiving recess hours (based on the other libraries; confirm on the library calendar)',
-      },
-    ],
     overrides: [
+      { from: '2026-10-10', hours: [r('10am', '6pm')], note: 'Parents and Family Weekend' },
+      { from: '2026-11-24', hours: [r('9am', '5pm')], note: 'Thanksgiving hours' },
+      { from: '2026-11-25', to: '2026-11-28', hours: 'closed', note: 'Closed for Thanksgiving' },
+      { from: '2026-11-29', hours: [r('2pm', '10pm')], note: 'Thanksgiving Sunday hours' },
+      { from: '2026-12-23', hours: [r('9am', '5pm')], note: 'Last day of finals' },
+      { from: '2026-12-24', to: '2027-01-03', hours: 'closed', note: 'Closed for winter break' },
       { from: '2026-08-31', to: '2026-09-04', hours: [r('9am', '5pm')], note: 'Pre-semester hours' },
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed Labor Day weekend' },
     ],
@@ -120,7 +119,7 @@ export const library: Location[] = [
       source: 'https://tufts.libcal.com/hours',
       schedule: 'https://tufts.libcal.com/hours',
     },
-    verified: '2026-09-03',
+    verified: '2026-09-05',
     confidence: 'high',
   },
 ];

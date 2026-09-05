@@ -30,6 +30,9 @@ export type HoursSpec = WeekHours | 'closed' | 'unknown';
 
 /** Hours for a specific date or date range, e.g. Labor Day or first week of classes. */
 export interface DateOverride {
+  /** Higher values win within static or live overrides. Equal-priority overlaps are invalid. */
+  priority?: number;
+  confidence?: 'high' | 'medium' | 'low';
   /** YYYY-MM-DD, inclusive. */
   from: string;
   /** YYYY-MM-DD, inclusive. Defaults to `from`. */
@@ -41,6 +44,7 @@ export interface DateOverride {
 
 /** Hours during a named calendar period (e.g. 'thanksgiving-2026'). */
 export interface PeriodHours {
+  confidence?: 'high' | 'medium' | 'low';
   period: string;
   hours: WeekHours | 'closed' | 'unknown' | 'regular';
   note?: string;
@@ -99,6 +103,10 @@ export interface Location {
   /** YYYY-MM-DD the hours were last checked against the source. */
   verified?: string;
   confidence?: 'high' | 'medium' | 'low';
+  /** Unresolved disagreement between official sources; do not choose a schedule. */
+  sourceConflict?: string;
+  /** Last date supported by the regular schedule, independent of the calendar horizon. */
+  validThrough?: string;
 }
 
 export interface Holiday {

@@ -1,48 +1,54 @@
-import { afterEach, describe, expect, it, vi } from 'vitest';
-import worker, { type Env } from '../src/worker';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { Env } from '../src/worker';
 import type { LiveData } from '../src/engine/live';
+import { feedBody, NOW, response } from './live-fixtures';
 
-const env = { EVENT_RATE_LIMITER: { limit: vi.fn() } } as unknown as Env;
-const ctx = { waitUntil: () => undefined, passThroughOnException: () => undefined } as unknown as ExecutionContext;
-const json = (body: string) => new Response(body, { headers: { 'content-type': 'application/json' } });
+const env = {} as Env;
+let pending: Promise<unknown>[];
+const ctx = { waitUntil: (p: Promise<unknown>) => pending.push(p) } as unknown as ExecutionContext;
 
-/** A Nutrislice week where Carmichael is closed on Sat Sep 12; every other feed returns an empty object. */
-const closedWeek = JSON.stringify({ days: [{ date: '2026-09-12', menu_items: [{ text: 'Closed for testing', is_holiday: true }] }] });
-const feedsUp = () => vi.fn((url: string | URL | Request) => Promise.resolve(json(String(url).includes('carmichael') ? closedWeek : '{}')));
-const feedsDown = () => vi.fn(() => Promise.reject(new Error('offline')));
+beforeEach(() => {
+  vi.resetModules();
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(NOW);
+  pending = [];
+  vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+  vi.stubGlobal('fetch', vi.fn(async (url) => response(feedBody(String(url)))));
+});
+afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); vi.useRealTimers(); });
 
-async function live(): Promise<LiveData> {
-  const res = await worker.fetch(new Request('https://tufts.example/api/live'), env, ctx);
-  return (await res.json()) as LiveData;
+async function request(path: string) {
+  const { default: worker } = await import('../src/worker');
+  return worker.fetch(new Request(`https://tufts.example${path}`), env, ctx);
 }
 
-describe('live snapshot cache', () => {
-  afterEach(() => {
-    vi.unstubAllGlobals();
-    vi.useRealTimers();
+describe('live snapshot cache and health', () => {
+  it('reports healthy feeds, then fails readiness and removes old hours/counts after failure', async () => {
+    const first = await request('/healthz');
+    expect(first.status).toBe(200);
+    expect(first.headers.get('cache-control')).toBe('no-store');
+    vi.setSystemTime(new Date(NOW.getTime() + 20 * 60_000));
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
+    const second = await request('/api/live');
+    const data = await second.json() as LiveData;
+    expect(data.sources).toEqual({ library: 'error', dining: 'error', shuttles: 'error' });
+    expect(data.overrides.carmichael?.[0]?.hours).toBe('unknown');
+    expect(data.vehicles).toEqual({});
+    expect((await request('/healthz')).status).toBe(503);
+    expect(console.warn).toHaveBeenCalled();
   });
-
-  it('keeps a feed’s previous data and reports it stale when the feed fails on refresh', async () => {
-    vi.useFakeTimers({ toFake: ['Date'] });
-    vi.setSystemTime(new Date('2026-09-10T16:00:00Z'));
-    vi.stubGlobal('fetch', feedsUp());
-    const first = await live();
-    expect(first.sources).toEqual({ library: 'ok', dining: 'ok', shuttles: 'ok' });
-    expect(first.overrides.carmichael?.[0]).toMatchObject({ from: '2026-09-12', hours: 'closed' });
-
-    // Past the hard cap, so the next request blocks on a refresh; every feed is now failing.
-    vi.setSystemTime(new Date('2026-09-10T16:20:00Z'));
-    vi.stubGlobal('fetch', feedsDown());
-    const second = await live();
-    expect(second.sources).toEqual({ library: 'stale', dining: 'stale', shuttles: 'error' });
-    expect(second.overrides.carmichael?.[0]).toMatchObject({ from: '2026-09-12', hours: 'closed' });
-    expect(second.overrides.carmichael?.[0]?.note).toBe('Closed: “Closed for testing” (per Tufts Dining menu) · live feed unavailable, may be out of date');
-    // Bus counts are not carried forward: the chip disappears instead of showing an old number.
-    expect(second.vehicles).toEqual({});
-
-    // A further failure keeps the label single.
-    vi.setSystemTime(new Date('2026-09-10T16:40:00Z'));
-    const third = await live();
-    expect(third.overrides.carmichael?.[0]?.note).toBe(second.overrides.carmichael?.[0]?.note);
+  it('marks a background-refresh snapshot stale and hides shuttle counts', async () => {
+    await request('/api/live');
+    vi.setSystemTime(new Date(NOW.getTime() + 90_000));
+    const stale = await request('/healthz');
+    expect(stale.status).toBe(503);
+    expect((await stale.json() as { sources: LiveData['sources'] }).sources.library).toBe('stale');
+    await Promise.all(pending);
+    expect((await request('/healthz')).status).toBe(200);
+  });
+  it('rejects a malformed edge-cache snapshot', async () => {
+    vi.stubGlobal('caches', { default: { match: async () => response({ data: { overrides: {} }, at: NOW.getTime() }), put: async () => undefined } });
+    expect((await request('/healthz')).status).toBe(200);
+    expect(fetch).toHaveBeenCalled();
   });
 });

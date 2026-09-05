@@ -1,6 +1,7 @@
 import { calendar, locations } from '../data';
 import { computeAll } from '../engine/status';
-import { EMPTY_LIVE, type LiveData } from '../engine/live';
+import { EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
+import { updateHTML } from './update';
 import { cardParts, OPEN_STATES, renderClock } from '../render/render';
 import type { AnalyticsEvent } from '../engine/analytics';
 import type { State } from '../engine/types';
@@ -20,7 +21,8 @@ const LS_CAT = 'iio:cat';
 const SEARCH_TRACK_MS = 1_000;
 
 const byId = new Map(locations.map((l) => [l.id, l]));
-let live: LiveData = window.__LIVE__ ?? EMPTY_LIVE;
+let live: LiveData = isLiveData(window.__LIVE__) ? window.__LIVE__ : EMPTY_LIVE;
+let disconnected = false;
 let pinned = new Set<string>(readJson<string[]>(LS_PINNED) ?? []);
 let cat = readJson<string>(LS_CAT) ?? 'all';
 let query = '';
@@ -88,21 +90,25 @@ function track(event: AnalyticsEvent): void {
 
 function refresh(): void {
   const at = now();
-  const statuses = computeAll(locations, calendar, at, live.overrides);
+  const current = usableLive(live, at, disconnected);
+  const statuses = computeAll(locations, calendar, at, current.overrides);
   for (const st of statuses) {
     const card = document.getElementById(`loc-${st.id}`);
     const loc = byId.get(st.id);
     if (!card || !loc) continue;
-    const parts = cardParts(loc, st, live);
+    const parts = cardParts(loc, st, current);
     const head = $('.card-head', card);
     const body = $('.card-body', card);
-    if (head) head.innerHTML = parts.head;
-    if (body) body.innerHTML = parts.body;
+    if (head) updateHTML(head, parts.head);
+    if (body) updateHTML(body, parts.body);
     card.dataset.state = parts.state;
     syncPinButton(card);
   }
   const clock = document.getElementById('clock');
   if (clock) clock.innerHTML = renderClock(at, calendar);
+  const health = document.getElementById('live-sources');
+  const healthText = ` (${Object.entries(current.sources).map(([id, state]) => `${id}: ${state}`).join(', ')})`;
+  if (health && health.textContent !== healthText) health.textContent = healthText;
   applyFilters();
 }
 
@@ -188,17 +194,17 @@ function applyFilters(): number {
 
 async function pollLive(): Promise<void> {
   try {
-    const res = await fetch('/api/live', { headers: { accept: 'application/json' } });
-    if (!res.ok) return;
+    const res = await fetch('/api/live', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    if (!res.ok) throw new Error('Live request failed');
     noteServerTime(res.headers.get('date'));
-    const data = (await res.json()) as LiveData;
-    if (data && typeof data === 'object' && data.overrides) {
-      live = data;
-      refresh();
-    }
+    const data: unknown = await res.json();
+    if (!isLiveData(data)) throw new Error('Invalid live response');
+    live = data;
+    disconnected = false;
   } catch {
-    /* offline: keep using the last data */
+    disconnected = true;
   }
+  refresh();
 }
 
 /* Wiring ------------------------------------------------------------------ */
@@ -305,6 +311,7 @@ function init(): void {
   });
   window.addEventListener('focus', refresh);
   window.addEventListener('online', () => void pollLive());
+  window.addEventListener('offline', () => { disconnected = true; refresh(); });
   setInterval(() => void pollLive(), LIVE_POLL_MS);
 
   // If the server-rendered snapshot is old (cached), pull fresh live data now.

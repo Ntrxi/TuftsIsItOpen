@@ -1,7 +1,8 @@
 import { CATEGORY_ORDER, calendar, locations } from '../data';
 import { toDataPoint, type EventContext } from '../engine/analytics';
 import { computeAll } from '../engine/status';
-import { EMPTY_LIVE, type LiveData } from '../engine/live';
+import { EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
+import { record } from '../engine/validation';
 import { renderPage } from '../render/page';
 import { fetchAllLive } from './live';
 
@@ -59,7 +60,7 @@ const edgeCache = (): Cache => (caches as unknown as { default: Cache }).default
 async function refreshLive(ctx: ExecutionContext): Promise<LiveData> {
   if (inflight) return inflight;
   inflight = (async () => {
-    const data = await fetchAllLive(new Date(), memory?.data);
+    const data = await fetchAllLive(new Date());
     memory = { data, at: Date.now() };
     try {
       const cache = edgeCache();
@@ -84,22 +85,25 @@ async function getLive(ctx: ExecutionContext): Promise<LiveData> {
   if (!memory) {
     try {
       const hit = await edgeCache().match(LIVE_CACHE_KEY);
-      if (hit) memory = (await hit.json()) as { data: LiveData; at: number };
+      if (hit) {
+        const value: unknown = await hit.json();
+        if (record(value) && isLiveData(value.data)) memory = { data: value.data, at: Date.parse(value.data.fetchedAt) };
+      }
     } catch {
       /* ignore */
     }
   }
   const age = memory ? Date.now() - memory.at : Infinity;
-  if (memory && age < LIVE_FRESH_MS) return memory.data;
+  if (memory && age >= 0 && age < LIVE_FRESH_MS) return usableLive(memory.data, new Date());
   if (memory && age < LIVE_MAX_AGE_MS) {
     ctx.waitUntil(refreshLive(ctx).catch(() => undefined));
-    return { ...memory.data, sources: markStale(memory.data.sources) };
+    return usableLive({ ...memory.data, sources: markStale(memory.data.sources) }, new Date());
   }
   try {
     return await refreshLive(ctx);
   } catch {
     // Whatever we still have is older than the freshness window: say so.
-    return memory ? { ...memory.data, sources: markStale(memory.data.sources) } : EMPTY_LIVE;
+    return usableLive(memory?.data ?? EMPTY_LIVE, new Date(), true);
   }
 }
 
@@ -210,7 +214,13 @@ export default {
       return json({ calendar, locations }, { headers: { 'cache-control': 'public, max-age=3600' } });
     }
 
-    if (path === '/healthz') return new Response('ok');
+    if (path === '/healthz') {
+      const live = await getLive(ctx);
+      const ok = ['library', 'dining', 'shuttles'].every((id) => live.sources[id] === 'ok') && !live.failedLocations?.length;
+      return json({ ok, fetchedAt: live.fetchedAt || null, ageSeconds: live.fetchedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(live.fetchedAt)) / 1000)) : null,
+        sources: live.sources, failedLocations: live.failedLocations ?? [] },
+      { status: ok ? 200 : 503, headers: { 'cache-control': 'no-store' } });
+    }
 
     return env.ASSETS.fetch(request);
   },

@@ -31,12 +31,13 @@ function hallThanksgiving(regular: WeekHours, sundayDinner: DayHours): PeriodHou
   return {
     period: 'thanksgiving-2026',
     hours: [sundayDinner, regular[1], regular[2], regular[3], [], [], []],
+    confidence: 'low',
     note: THANKSGIVING_NOTE,
   };
 }
 
 const RETAIL_CLOSED_WEEK: PeriodHours[] = [
-  { period: 'thanksgiving-2026', hours: [[], [], [], [], [], [], []], note: 'Closed for Thanksgiving recess (prior-year pattern)' },
+  { period: 'thanksgiving-2026', confidence: 'low', hours: [[], [], [], [], [], [], []], note: 'Closed for Thanksgiving recess (prior-year pattern)' },
   { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
   { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
   { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer' },
@@ -215,7 +216,7 @@ export const dining: Location[] = [
     hours: [[], [], [], [], [r('6pm', '10pm', 'Pub night')], [], []],
     holidays: 'closed',
     breaks: 'closed',
-    overrides: [{ from: '2026-09-01', to: '2026-09-09', hours: 'closed', note: 'First pub night of the semester not announced yet' }],
+    overrides: [{ from: '2026-09-01', to: '2026-09-09', hours: 'unknown', note: 'First pub night of the semester not announced yet' }],
     links: { source: 'https://dining.tufts.edu/pub' },
     note: 'Pub nights are a series of events and do not run every Thursday. Check dining.tufts.edu/pub before going.',
     verified: '2026-09-03',

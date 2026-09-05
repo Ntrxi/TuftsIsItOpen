@@ -96,6 +96,12 @@ Always sum `_sample_interval` rather than `COUNT(*)`, because Analytics Engine s
 
 ## Updating hours
 
-Edit the relevant file in `src/data/`. Each location records its official `links.source`, a `verified` date, and a `confidence`. Locations marked `low` show an *Unverified* chip and `medium` a *Confirm hours* chip. When Tufts publishes break schedules, add them as `periods` entries keyed by the ids in `src/data/calendar.ts`.
+Edit the relevant file in `src/data/`. Each location records its official `links.source`, a `verified` date, and a `confidence`. Low/medium-confidence regular schedules resolve to unknown; estimated periods and overrides must also carry `confidence`. Use `sourceConflict` for unresolved official-source disagreement and `validThrough` for a schedule that ends before the calendar. `breaks: 'regular'` never extends calendar coverage.
+
+Live date overrides precede static overrides. Within either layer, higher `priority` wins; equal-priority overlapping hours overrides resolve to unknown and static overlaps fail the integrity test. Note-only notices combine without changing hours. When Tufts publishes break schedules, add `periods` entries keyed by `src/data/calendar.ts`.
+
+Failed feeds make affected hours unknown immediately. Snapshots expire after 15 minutes; vehicle counts expire after 3 minutes and disappear on connectivity or provider failure. `/healthz` returns uncached JSON (200 healthy, 503 degraded), including source health, snapshot age, and failed location ids. Provider failures emit structured `live_feed_failure` logs.
+
+CI runs tests, typechecking, and the production build in the `validate` job for pull requests, main pushes, and merge queues. Require `validate` with an up-to-date branch in GitHub branch protection. The workflow must be published before GitHub can run it.
 
 Unofficial student project by Aaron Chung, not affiliated with Tufts University. The Jumbo logo (`public/jumbo.svg` and the app icons) is a Tufts University trademark, used here for identification in a non-commercial student project.

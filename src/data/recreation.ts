@@ -84,8 +84,9 @@ export const recreation: Location[] = [
     links: {
       source: 'https://gotuftsjumbos.com/sports/2022/5/6/facilities-Reservation.aspx',
     },
-    note: 'Schedule shifts around varsity practice each semester. Spring 2027 times not posted yet.',
-    verified: '2026-09-03',
+    validThrough: '2027-01-19',
+    note: 'The official Mon–Thu morning entry reads 7 PM–8:15 AM, conflicting with its other swim sessions. Confirm rec swim times with athletics. Spring 2027 times are not posted.',
+    verified: '2026-09-05',
     confidence: 'medium',
   },
 ];

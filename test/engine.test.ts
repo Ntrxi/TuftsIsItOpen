@@ -91,13 +91,12 @@ describe('resolveDay precedence', () => {
 
   it('keeps regular hours during finals unless a location lists the exam period', () => {
     // Spring finals 2027: no location lists the period, so nothing may fall back to its break default.
-    for (const id of ['dewick', 'popup-pub', 'crafts-center', 'health-service', 'tisch-library', 'davis-shuttle']) {
+    for (const id of ['dewick', 'health-service', 'tisch-library', 'davis-shuttle']) {
       expect(resolveDay(byId(id), '2027-05-10', calendar).source, id).toBe('regular');
     }
     const pub = computeStatus(byId('popup-pub'), calendar, at('2027-05-10', '12:00')); // Mon
-    expect(pub.state).toBe('closed');
-    expect(pub.detail).toBe('Opens Thu 6:00 PM');
-    expect(pub.scheduleNote).toBeUndefined();
+    expect(pub.state).toBe('unknown');
+    expect(pub.detail).toContain('unconfirmed');
   });
 
   it('applies named break periods', () => {
@@ -116,8 +115,8 @@ describe('resolveDay precedence', () => {
     expect(dewick.detail).toBe('Hours after Aug 31, 2027 not published yet');
     expect(computeStatus(byId('popup-pub'), calendar, at(after, '12:00')).state).toBe('unknown');
     // Year-round services that never follow the academic calendar keep their hours.
-    expect(resolveDay(byId('saferide'), after, calendar).source).toBe('regular');
-    expect(resolveDay(byId('tufts-post-office'), after, calendar).source).toBe('regular');
+    expect(resolveDay(byId('saferide'), after, calendar).hours).toBe('unknown');
+    expect(resolveDay(byId('tufts-post-office'), after, calendar).hours).toBe('unknown');
     // The last covered day still resolves normally, and the lookahead stops at the edge.
     const last = computeStatus(byId('dewick'), calendar, at(calendar.through, '12:00'));
     expect(last.state).toBe('closed');
@@ -166,7 +165,7 @@ describe('computeStatus', () => {
 
   it('handles overnight hours (Tisch open until 4 AM)', () => {
     const late = computeStatus(byId('tisch-library'), calendar, at('2026-09-15', '1:30')); // Tue 1:30 AM = Mon night
-    expect(late.state).toBe('open');
+    expect(late.state).toBe('special');
     expect(late.period).toBe('Tufts ID only · late-night study');
     expect(late.detail).toBe('Closes 4:00 AM, back 7:45 AM');
     const gap = computeStatus(byId('tisch-library'), calendar, at('2026-09-15', '5:00'));
@@ -244,13 +243,12 @@ describe('computeStatus', () => {
     expect(computeStatus(byId('health-service'), calendar, at('2026-09-10', '15:00')).state).toBe('appointment');
   });
 
-  it('closes over Thanksgiving and reopens Sunday dinner for dining halls', () => {
+  it('does not claim definitive hours from prior-year Thanksgiving estimates', () => {
     const thu = computeStatus(byId('dewick'), calendar, at('2026-11-26', '12:00'));
-    expect(thu.state).toBe('closed');
-    expect(thu.detail).toBe('Opens Sun 5:00 PM');
+    expect(thu.state).toBe('unknown');
+    expect(thu.detail).toContain('prior years');
     const sun = computeStatus(byId('dewick'), calendar, at('2026-11-29', '18:00'));
-    expect(sun.state).toBe('open');
-    expect(sun.period).toBe('Dinner');
+    expect(sun.state).toBe('unknown');
   });
 
   it('keeps Carmichael closed through the Sep 2026 building issue and reopens for Sunday dinner', () => {
@@ -268,7 +266,7 @@ describe('computeStatus', () => {
     expect(pax.scheduleNote).toContain('Yom Kippur');
     expect(computeStatus(byId('pax-et-lox'), calendar, at('2026-09-14', '12:00')).state).toBe('open');
     const tisch = computeStatus(byId('tisch-library'), calendar, at('2026-11-29', '14:00'));
-    expect(tisch.state).toBe('open');
+    expect(tisch.state).toBe('unknown');
     expect(computeStatus(byId('tisch-library'), calendar, at('2026-11-26', '14:00')).state).toBe('closed');
   });
 
@@ -283,11 +281,12 @@ describe('computeStatus', () => {
     }
   });
 
-  it('gives Lilly the same Thanksgiving pattern as the other libraries', () => {
+  it('uses Lilly’s own published Thanksgiving hours', () => {
     expect(computeStatus(byId('lilly-music-library'), calendar, at('2026-11-26', '14:00')).state).toBe('closed');
     const sun = computeStatus(byId('lilly-music-library'), calendar, at('2026-11-29', '14:00'));
     expect(sun.state).toBe('open');
-    expect(sun.scheduleNote).toContain('confirm');
+    expect(sun.scheduleNote).toContain('Thanksgiving Sunday');
+    expect(computeStatus(byId('lilly-music-library'), calendar, at('2026-11-29', '13:00')).state).toBe('closed');
   });
 
   it('applies live overrides ahead of static data', () => {
@@ -375,6 +374,53 @@ describe('data integrity', () => {
         expect(o.from).toMatch(/^\d{4}-\d{2}-\d{2}$/);
         if (o.to) expect(o.to >= o.from).toBe(true);
       }
+    }
+  });
+});
+
+
+describe('schedule safety regressions', () => {
+  it('does not produce definitive states for uncertain regular or estimated override hours', () => {
+    for (const confidence of ['low', 'medium'] as const) {
+      const loc = { ...byId('dewick'), confidence };
+      for (const time of ['03:00', '12:00']) expect(computeStatus(loc, calendar, at('2026-09-16', time)).state).toBe('unknown');
+      expect(computeStatus(loc, calendar, at('2026-09-16', '12:00'), { dewick: [{ from: '2026-09-16', hours: 'closed', note: 'Confirmed closure' }] }).state).toBe('closed');
+      expect(resolveDay(loc, '2026-09-16', calendar, [{ from: '2026-09-16', hours: 'closed', confidence, note: 'Estimated' }]).hours).toBe('unknown');
+    }
+  });
+  it('keeps unresolved official-source conflicts unknown, even with an override', () => {
+    const loc = byId('tts-walkup');
+    expect(computeStatus(loc, calendar, at('2026-09-16', '12:00')).detail).toContain('disagree');
+    expect(resolveDay(loc, '2026-09-16', calendar, [{ from: '2026-09-16', hours: 'closed', note: '' }]).hours).toBe('unknown');
+    expect(byId('nolop').hours).toBe('unknown');
+  });
+  it('uses explicit priority independent of order and rejects ambiguous overlaps', () => {
+    const a = { from: '2026-09-16', hours: 'closed' as const, note: 'Closure' };
+    const b = { from: '2026-09-16', hours: [r('9am', '5pm')], priority: 1, note: 'Reopening' };
+    for (const overrides of [[a, b], [b, a]]) {
+      expect(resolveDay({ ...byId('dewick'), overrides }, a.from, calendar).note).toBe('Reopening');
+      expect(resolveDay(byId('dewick'), a.from, calendar, overrides).note).toBe('Reopening');
+    }
+    expect(resolveDay(byId('dewick'), a.from, calendar, [a, { ...b, priority: 0 }]).hours).toBe('unknown');
+    expect(resolveDay({ ...byId('dewick'), overrides: [b] }, a.from, calendar, [a]).hours).toEqual([]);
+  });
+  it('rejects unprioritized overlapping static overrides in the dataset', () => {
+    for (const loc of locations) {
+      const overrides = (loc.overrides ?? []).filter((o) => o.hours !== undefined);
+      for (let i = 0; i < overrides.length; i++) for (const b of overrides.slice(i + 1)) {
+        const a = overrides[i]!;
+        if (a.from <= (b.to ?? b.from) && b.from <= (a.to ?? a.from)) {
+          expect(a.priority ?? 0, `${loc.id}: ${a.from} overlaps ${b.from}`).not.toBe(b.priority ?? 0);
+        }
+      }
+    }
+  });
+  it('expires regular break schedules and regular overrides at the calendar boundary', () => {
+    const date = addDays(calendar.through, 1);
+    for (const loc of locations.filter((l) => l.breaks === 'regular')) {
+      expect(resolveDay(loc, date, calendar).hours).toBe('unknown');
+      expect(resolveDay(loc, date, calendar, [{ from: date, hours: 'regular', note: '' }]).hours).toBe('unknown');
+      expect(resolveDay(loc, date, calendar, [{ from: date, hours: 'closed', note: 'Published closure' }]).hours).toEqual([]);
     }
   });
 });

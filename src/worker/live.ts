@@ -4,29 +4,26 @@
  * static hours. Everything is best-effort: a failing feed never breaks the page.
  */
 import type { DateOverride, DayHours, Interval } from '../engine/types';
-import type { LiveData } from '../engine/live';
-import { calendar, locations } from '../data';
-import { resolveDay } from '../engine/status';
-import { mergeContiguous, sameHours } from '../engine/format';
+import { usableLive, type LiveData } from '../engine/live';
+import { record, dateKey } from '../engine/validation';
 import { addDays, toLocal } from '../engine/time';
 
 const FETCH_TIMEOUT_MS = 6000;
 const UA = 'TuftsIsItOpen/1.0 (+https://github.com/Ntrxi/TuftsIsItOpen)';
 
-async function getJson<T>(url: string, init: RequestInit = {}): Promise<T> {
+async function getJson(url: string, init: RequestInit = {}): Promise<unknown> {
   const res = await fetch(url, {
     ...init,
     headers: { accept: 'application/json', 'user-agent': UA, ...(init.headers ?? {}) },
     signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
   });
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
-  return (await res.json()) as T;
+  return await res.json();
 }
 
 /* LibCal (Tisch Library hours) ------------------------------------------- */
 
 const LIBCAL_IID = 1412;
-const PUBLIC_END = 21 * 60;
 const LIBCAL_LOCATIONS: { lid: number; locId: string; splitLateNight?: boolean }[] = [
   { lid: 20832, locId: 'tisch-library', splitLateNight: true },
   { lid: 20836, locId: 'tisch-dds' },
@@ -39,23 +36,41 @@ interface LibCalDay {
   times: { status: string; hours?: { from: string; to: string }[] };
   rendered?: string;
 }
-type LibCalGrid = Record<string, { weeks: Record<string, LibCalDay>[] }>;
+function libcalDays(entry: unknown): Map<string, LibCalDay> {
+  if (!record(entry) || !Array.isArray(entry.weeks)) throw new Error('Invalid LibCal location');
+  const days = new Map<string, LibCalDay>();
+  for (const week of entry.weeks) {
+    if (!record(week)) throw new Error('Invalid LibCal week');
+    for (const day of Object.values(week)) {
+      if (!record(day) || !dateKey(day.date) || !record(day.times) ||
+          typeof day.times.status !== 'string' || !['open', 'closed', '24hours', 'not-set'].includes(day.times.status)) throw new Error('Invalid LibCal day');
+      const times = day.times;
+      if (times.status === 'open' && (!Array.isArray(times.hours) || !times.hours.length || !times.hours.every((h) =>
+        record(h) && typeof h.from === 'string' && typeof h.to === 'string' &&
+        parseLibCalTime(h.from) !== undefined && parseLibCalTime(h.to) !== undefined))) throw new Error('Invalid LibCal hours');
+      if (days.has(day.date)) throw new Error('Duplicate LibCal date');
+      days.set(day.date, { date: day.date, times: { status: day.times.status,
+        hours: Array.isArray(times.hours) ? times.hours.map((h: Record<string, unknown>) => ({ from: String(h.from), to: String(h.to) })) : undefined } });
+    }
+  }
+  return days;
+}
 
 function parseLibCalTime(text: string): number | undefined {
   const s = text.trim().toLowerCase();
   if (s === 'noon') return 720;
   if (s === 'midnight') return 0;
   const m = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/.exec(s);
-  if (!m) return undefined;
+  if (!m || Number(m[1]) < 1 || Number(m[1]) > 12 || Number(m[2] ?? 0) > 59) return undefined;
   let h = Number(m[1]) % 12;
   if (m[3] === 'pm') h += 12;
   return h * 60 + Number(m[2] ?? 0);
 }
 
-function libcalDayHours(day: LibCalDay, splitLateNight: boolean): DayHours | 'closed' | undefined {
+function libcalDayHours(day: LibCalDay, splitLateNight: boolean, publicHours?: DayHours): DayHours | 'closed' | undefined {
   const status = day.times.status;
   if (status === 'closed') return 'closed';
-  // A 24-hour day is one midnight-to-midnight range, split at the public cutoff like any other.
+  // Building hours do not imply public access, especially at midnight on a 24-hour day.
   const ranges = status === '24hours' ? [{ from: 'midnight', to: 'midnight' }] : status === 'open' ? day.times.hours : undefined;
   if (!ranges?.length) return undefined; // not-set etc.
   const out: DayHours = [];
@@ -64,44 +79,59 @@ function libcalDayHours(day: LibCalDay, splitLateNight: boolean): DayHours | 'cl
     let to = parseLibCalTime(h.to);
     if (from === undefined || to === undefined) return undefined;
     if (to <= from) to += 1440;
-    if (splitLateNight && from < PUBLIC_END && to > PUBLIC_END) {
-      out.push({ start: from, end: PUBLIC_END, label: 'Open to public' }, { start: PUBLIC_END, end: to, label: 'Tufts ID only · late-night study' });
-    } else {
-      out.push({ start: from, end: to });
+    if (!splitLateNight) { out.push({ start: from, end: to }); continue; }
+    const cuts = [...new Set([from, to, ...(publicHours ?? []).flatMap((p) => [p.start, p.end]).filter((n) => n > from && n < to)])].sort((a, b) => a - b);
+    for (let i = 0; i < cuts.length - 1; i++) {
+      const start = cuts[i]!;
+      const end = cuts[i + 1]!;
+      const isPublic = publicHours?.some((p) => p.start <= start && p.end >= end);
+      out.push({ start, end, label: publicHours === undefined ? 'Access hours unconfirmed' : isPublic ? 'Open to public' : 'Tufts ID only · late-night study' });
     }
   }
   return out;
 }
 
-async function libcalOverrides(todayKey: string): Promise<Record<string, DateOverride[]>> {
+async function libcalOverrides(todayKey: string): Promise<NutrisliceResult> {
   const out: Record<string, DateOverride[]> = {};
-  const url = `https://tufts.libcal.com/api_hours_grid.php?iid=${LIBCAL_IID}&format=json&weeks=3&date=${todayKey}`;
-  const grid = await getJson<LibCalGrid>(url);
+  const failed: string[] = [];
+  const url = `https://tufts.libcal.com/api_hours_grid.php?iid=${LIBCAL_IID}&format=json&weeks=3&date=${addDays(todayKey, -1)}`;
+  const grid = await getJson(url);
+  if (!record(grid) || !Array.isArray(grid.locations)) throw new Error('Invalid LibCal envelope');
+  const entries = grid.locations;
+  const readLocation = (lid: number) => {
+    const matches = entries.filter((e) => record(e) && Number(e.lid) === lid);
+    if (matches.length !== 1) throw new Error('Missing or duplicate LibCal location');
+    return libcalDays(matches[0]);
+  };
   for (const cfg of LIBCAL_LOCATIONS) {
-    const entry = grid[`loc_${cfg.lid}`];
-    const loc = locations.find((l) => l.id === cfg.locId);
-    if (!entry || !loc) continue;
-    const overrides: DateOverride[] = [];
-    for (const week of entry.weeks) {
-      for (const day of Object.values(week)) {
-        if (!day?.date || day.date < addDays(todayKey, -1)) continue;
-        const hours = libcalDayHours(day, cfg.splitLateNight ?? false);
-        if (hours === undefined) continue;
-        // Only override when the feed disagrees with the static schedule, so labels/notes survive.
-        const staticDay = resolveDay(loc, day.date, calendar);
-        const staticHours = staticDay.hours === 'unknown' ? undefined : mergeContiguous(staticDay.hours);
-        const liveHours = hours === 'closed' ? [] : mergeContiguous(hours);
-        if (staticHours && sameHours(staticHours, liveHours)) continue;
-        overrides.push({
-          from: day.date,
-          hours: hours === 'closed' ? 'closed' : hours,
-          note: hours === 'closed' ? 'Closed (per library calendar)' : 'Hours from the library calendar',
-        });
+    try {
+      const days = readLocation(cfg.lid);
+      const publicDays = cfg.splitLateNight ? readLocation(20834) : undefined;
+      if (!days.has(todayKey) || !days.has(addDays(todayKey, -1))) throw new Error('LibCal missing current or previous date');
+      out[cfg.locId] = [];
+      for (const [date, day] of days) {
+        if (date < addDays(todayKey, -1)) continue;
+        let publicHours: DayHours | undefined;
+        if (publicDays) {
+          const current = publicDays.get(date);
+          const next = publicDays.get(addDays(date, 1));
+          const a = current && libcalDayHours(current, false);
+          const b = next && libcalDayHours(next, false);
+          const building = libcalDayHours(day, false);
+          const overnight = Array.isArray(building) && building.some((h) => h.end > 1440);
+          if (a !== undefined && (!overnight || b !== undefined)) {
+            publicHours = [...(a === 'closed' ? [] : a), ...(Array.isArray(b) ? b.map((h) => ({ ...h, start: h.start + 1440, end: h.end + 1440 })) : [])];
+          }
+        }
+        const hours = libcalDayHours(day, cfg.splitLateNight ?? false, publicHours);
+        out[cfg.locId]!.push({ from: date, hours: hours ?? 'unknown', note: hours === undefined ? 'Library calendar hours not published' : 'Hours from the library calendar' });
       }
+    } catch (error) {
+      failed.push(cfg.locId);
+      console.warn(JSON.stringify({ event: 'live_feed_failure', provider: 'library', location: cfg.locId, reason: String(error) }));
     }
-    if (overrides.length) out[cfg.locId] = overrides;
   }
-  return out;
+  return { overrides: out, failed };
 }
 
 /* Nutrislice (Tufts Dining closures) -------------------------------------- */
@@ -143,6 +173,21 @@ interface NutrisliceWeek {
   days?: NutrisliceDay[];
 }
 
+function parseNutrisliceWeek(value: unknown): NutrisliceWeek {
+  if (!record(value) || !Array.isArray(value.days)) throw new Error('Invalid Nutrislice week');
+  const dates = new Set<string>();
+  for (const day of value.days) {
+    if (!record(day) || !dateKey(day.date) || dates.has(day.date) || !Array.isArray(day.menu_items)) throw new Error('Invalid Nutrislice day');
+    dates.add(day.date);
+    for (const item of day.menu_items) {
+      if (!record(item) || (item.text != null && typeof item.text !== 'string') ||
+          ['is_holiday', 'is_station_header', 'is_section_title'].some((k) => item[k] !== undefined && typeof item[k] !== 'boolean') ||
+          (item.food != null && !record(item.food))) throw new Error('Invalid Nutrislice item');
+    }
+  }
+  return value as NutrisliceWeek;
+}
+
 /** What one published menu says about a day. */
 interface MenuDay {
   /** Notice or closure text, if any. */
@@ -151,7 +196,7 @@ interface MenuDay {
   hasFood: boolean;
 }
 
-const CLOSED_RE = /\b(clos|holiday|break|no service|not open)/i;
+const CLOSED_RE = /\b(closed|closing|closures?|holiday|break|no service|not open)\b/i;
 
 /** Summarize one menu's day; undefined when nothing is published for it (no food and no notice). */
 function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
@@ -164,8 +209,7 @@ function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
 /**
  * Combine every published menu for a date into one override, or undefined when there is
  * nothing to report. The day counts as closed only when every published menu is a closure
- * notice with no food; a closure on some meals (e.g. "dinner closed for the food fair") keeps
- * the scheduled hours and shows the text as a notice instead.
+ * notice with no food. Mixed closure/service evidence cannot establish exact opening hours.
  */
 function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | undefined {
   const texts = [...new Set(menus.map((m) => m.text).filter(Boolean))];
@@ -173,6 +217,7 @@ function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | u
   const quoted = texts.map((t) => `“${t}”`).join(', ');
   const allClosed = menus.every((m) => m.text && !m.hasFood && CLOSED_RE.test(m.text));
   if (allClosed) return { from: date, hours: 'closed', note: `Closed: ${quoted} (per Tufts Dining menu)` };
+  if (texts.some((text) => CLOSED_RE.test(text))) return { from: date, hours: 'unknown', note: `Dining service differs by meal; confirm hours: ${quoted}` };
   return { from: date, note: `Tufts Dining notice: ${quoted}` };
 }
 
@@ -197,8 +242,9 @@ async function nutrisliceOverrides(todayKey: string): Promise<NutrisliceResult> 
             const url = `https://tufts.api.nutrislice.com/menu/api/weeks/school/${cfg.slug}/menu-type/${menu}/${y}/${m}/${d}/`;
             let week: NutrisliceWeek;
             try {
-              week = await getJson<NutrisliceWeek>(url);
-            } catch {
+              week = parseNutrisliceWeek(await getJson(url));
+            } catch (error) {
+              console.warn(JSON.stringify({ event: 'live_feed_failure', provider: 'dining', location: cfg.locId, menu, week: weekKey, reason: String(error) }));
               failed.add(cfg.locId);
               return;
             }
@@ -210,6 +256,7 @@ async function nutrisliceOverrides(todayKey: string): Promise<NutrisliceResult> 
           }),
         ),
       );
+      if (failed.has(cfg.locId)) return;
       const overrides = [...byDate]
         .sort(([a], [b]) => (a < b ? -1 : 1))
         .map(([date, menus]) => nutrisliceDayOverride(date, menus))
@@ -235,12 +282,14 @@ const ROUTE_TO_LOC: Record<string, string> = {
 };
 
 async function passioVehicles(): Promise<Record<string, number>> {
-  const json = await getJson<{ buses?: Record<string, unknown> }>('https://passiogo.com/mapGetData.php?getBuses=1&deviceId=1', {
+  const json = await getJson('https://passiogo.com/mapGetData.php?getBuses=1&deviceId=1', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ s0: PASSIO_SYSTEM, sA: 1 }),
   });
+  if (!record(json) || (!record(json.buses) && !Array.isArray(json.buses))) throw new Error('Invalid Passio buses');
   const counts: Record<string, number> = {};
+  const seen = new Set<string>();
   for (const id of new Set(Object.values(ROUTE_TO_LOC))) counts[id] = 0;
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
@@ -248,12 +297,19 @@ async function passioVehicles(): Promise<Record<string, number>> {
     } else if (node && typeof node === 'object') {
       const obj = node as Record<string, unknown>;
       if ('routeId' in obj || 'busId' in obj) {
+        if (!['string', 'number'].includes(typeof obj.routeId) || !['string', 'number'].includes(typeof obj.busId)) throw new Error('Invalid Passio vehicle');
+        if (obj.outOfService !== undefined && !['0', '1'].includes(String(obj.outOfService))) throw new Error('Invalid Passio service flag');
+        if (obj.outdated !== undefined && !['0', '1'].includes(String(obj.outdated))) throw new Error('Invalid Passio freshness flag');
         if (String(obj.outOfService ?? '0') === '1') return;
+        if (String(obj.outdated ?? '0') === '1' || seen.has(String(obj.busId))) return;
+        seen.add(String(obj.busId));
         const locId = ROUTE_TO_LOC[String(obj.routeId ?? '')];
         if (locId) counts[locId] = (counts[locId] ?? 0) + 1;
         return;
       }
       Object.values(obj).forEach(walk);
+    } else {
+      throw new Error('Invalid Passio node');
     }
   };
   walk(json.buses ?? {});
@@ -262,68 +318,29 @@ async function passioVehicles(): Promise<Record<string, number>> {
 
 /* Assembly ---------------------------------------------------------------- */
 
-export interface ProviderResult {
-  overrides: Record<string, DateOverride[]>;
-  vehicles: Record<string, number>;
-  sources: LiveData['sources'];
-}
-
-const STALE_SUFFIX = ' · live feed unavailable, may be out of date';
-
-/** Carried-forward overrides say so on the card, not only in the footer. */
-function markStale(o: DateOverride): DateOverride {
-  return o.note.endsWith(STALE_SUFFIX) ? o : { ...o, note: o.note + STALE_SUFFIX };
-}
-
-/**
- * Fetch every feed. When an hours feed fails and `previous` holds data for it, that data is kept
- * (labelled as possibly out of date) and the source is reported as 'stale' rather than dropping
- * closures the page was already showing. Vehicle counts are not kept: a count from minutes ago
- * says nothing about where the buses are now.
- */
-export async function fetchAllLive(now: Date, previous?: LiveData): Promise<LiveData> {
+/** Failed hours feeds become unknown; old closures and openings are never carried forward as current. */
+export async function fetchAllLive(now: Date): Promise<LiveData> {
   const todayKey = toLocal(now).key;
   const [lib, nutri, passio] = await Promise.allSettled([libcalOverrides(todayKey), nutrisliceOverrides(todayKey), passioVehicles()]);
   const overrides: Record<string, DateOverride[]> = {};
   const sources: LiveData['sources'] = {};
-
-  const keepPrevious = (source: keyof LiveData['sources'] & string, ids: string[]): void => {
-    const had = previous && previous.sources[source] !== undefined && previous.sources[source] !== 'error';
-    if (had) for (const id of ids) if (previous!.overrides[id]) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!.map(markStale)];
-    sources[source] = had ? 'stale' : 'error';
-  };
-
-  if (lib.status === 'fulfilled') {
-    Object.assign(overrides, lib.value);
-    sources.library = 'ok';
-  } else {
-    keepPrevious(
-      'library',
-      LIBCAL_LOCATIONS.map((c) => c.locId),
-    );
-  }
-
-  if (nutri.status === 'fulfilled' && nutri.value.failed.length < NUTRISLICE.length) {
-    for (const [id, list] of Object.entries(nutri.value.overrides)) {
-      overrides[id] = [...(overrides[id] ?? []), ...list];
+  const failedLocations: string[] = [];
+  for (const [provider, result] of [['library', lib], ['dining', nutri]] as const) {
+    if (result.status === 'fulfilled') {
+      Object.assign(overrides, result.value.overrides);
+      failedLocations.push(...result.value.failed);
+      sources[provider] = result.value.failed.length ? 'error' : 'ok';
+    } else {
+      sources[provider] = 'error';
+      console.warn(JSON.stringify({ event: 'live_feed_failure', provider, reason: String(result.reason) }));
     }
-    // Locations whose menus could not all be read keep whatever the last snapshot showed for them.
-    const kept = previous && previous.sources.dining !== undefined && previous.sources.dining !== 'error' ? nutri.value.failed.filter((id) => previous.overrides[id]) : [];
-    for (const id of kept) overrides[id] = [...(overrides[id] ?? []), ...previous!.overrides[id]!.map(markStale)];
-    sources.dining = kept.length ? 'stale' : 'ok';
-  } else {
-    keepPrevious(
-      'dining',
-      NUTRISLICE.map((c) => c.locId),
-    );
   }
-
   const vehicles = passio.status === 'fulfilled' ? passio.value : {};
   sources.shuttles = passio.status === 'fulfilled' ? 'ok' : 'error';
-
-  return { fetchedAt: now.toISOString(), overrides, vehicles, sources };
+  if (passio.status === 'rejected') console.warn(JSON.stringify({ event: 'live_feed_failure', provider: 'shuttles', reason: String(passio.reason) }));
+  return usableLive({ fetchedAt: now.toISOString(), overrides, vehicles, sources, failedLocations }, now);
 }
 
 /** Exposed for tests. */
-export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride };
+export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride, parseNutrisliceWeek, libcalDays };
 export type { Interval };
