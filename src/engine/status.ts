@@ -189,11 +189,14 @@ export function stateLabel(state: State): string {
   }
 }
 
-function nextDepartures(loc: Location, now: LocalTime): Status['nextDepartures'] {
-  const table = loc.transit?.departures?.[now.dow];
-  if (!table) return undefined;
+function nextDepartures(loc: Location, now: LocalTime, includeYesterday: boolean): Status['nextDepartures'] {
+  const today = loc.transit?.departures?.[now.dow];
+  // Yesterday's timetable may run past midnight (the Friday loop until 2 AM); shift it into today's frame.
+  const yesterday = includeYesterday ? loc.transit?.departures?.[(now.dow + 6) % 7] : undefined;
+  if (!today && !yesterday) return undefined;
   const out: { stop: string; time: string; inMinutes: number }[] = [];
-  for (const [stop, times] of Object.entries(table)) {
+  for (const stop of new Set([...Object.keys(yesterday ?? {}), ...Object.keys(today ?? {})])) {
+    const times = [...(yesterday?.[stop] ?? []).map((t) => t - 1440), ...(today?.[stop] ?? [])].sort((a, b) => a - b);
     const next = times.find((t) => t >= now.minutes);
     if (next !== undefined) out.push({ stop, time: fmtTime(next), inMinutes: next - now.minutes });
   }
@@ -245,7 +248,7 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
 
   const todayText = fmtDay(todayHours);
   const todayPeriods = fmtPeriods(todayHours);
-  const departures = todayRes.source === 'regular' ? nextDepartures(loc, now) : undefined;
+  const departures = todayRes.source === 'regular' ? nextDepartures(loc, now, yesterdayRes.source === 'regular') : undefined;
 
   if (span) {
     const closingSoon = loc.closingSoonMinutes ?? 30;

@@ -144,6 +144,16 @@ describe('computeStatus', () => {
     expect(st.period).toContain('All Stops');
   });
 
+  it('keeps showing overnight departures after midnight', () => {
+    // Saturday 1:05 AM: the Friday All Stops loop still runs until 2 AM.
+    const st = computeStatus(byId('davis-shuttle'), calendar, at('2026-09-12', '1:05'));
+    expect(st.state).toBe('running');
+    expect(st.nextDepartures).toEqual([
+      { stop: 'Campus Center', time: '1:30 AM', inMinutes: 25 },
+      { stop: 'Davis Square', time: '1:10 AM', inMinutes: 5 },
+    ]);
+  });
+
   it('marks transit as not running and names the next run', () => {
     const st = computeStatus(byId('davis-shuttle'), calendar, at('2026-09-12', '8:00')); // Sat morning
     expect(st.state).toBe('not_running');
