@@ -49,6 +49,8 @@ it('retains recent data through failures, expires by age, and recovers without A
   expect(document.body.textContent).toContain('3 buses live');
   window.dispatchEvent(new Event('offline'));
   expect(document.body.textContent).toContain('3 buses live');
+  // Polling pauses while offline and resumes on reconnect (jsdom never flips navigator.onLine itself).
+  window.dispatchEvent(new Event('online'));
   await vi.advanceTimersByTimeAsync(120_000);
   expect(fetch).toHaveBeenCalled();
   expect(document.body.textContent).toContain('3 buses live');

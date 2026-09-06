@@ -59,40 +59,19 @@ Wrangler's checked-in build hook builds the client bundle before deployment, inc
 
 ## Analytics
 
-Two free Cloudflare products, both cookie-less and with no personal data:
+Cloudflare Web Analytics provides basic traffic statistics (visitors, page views, and referrers). The Worker includes its beacon only when `CF_BEACON_TOKEN` in `wrangler.jsonc` is non-empty. The token is public; `npm run dev` and `npm start` disable the beacon.
 
-**Cloudflare Web Analytics** (visitors, page views, referrers, countries, trends). The Worker injects the beacon script into the page only when `CF_BEACON_TOKEN` in `wrangler.jsonc` is non-empty. The token is public (it ships in the HTML), so it lives in config rather than a secret.
+To configure it, add the site in Cloudflare's Web Analytics dashboard, choose the manual JavaScript snippet, and copy its token into `CF_BEACON_TOKEN`. Keep automatic injection disabled to avoid duplicate beacons. If adding a CSP, allow `https://static.cloudflareinsights.com` in `script-src` and `https://cloudflareinsights.com` in `connect-src`.
 
-`npm run dev` and `npm start` select `--env dev`, which disables the beacon and omits the Analytics Engine dataset. Use that environment for direct `wrangler dev` commands too.
+Custom interaction tracking is disabled. `/api/event` returns 410 for older clients; those requests still consume Worker quota until users reload. Historical Analytics Engine data is not deleted by this change.
 
-**Workers Analytics Engine** (custom events). The browser posts tiny JSON events to `POST /api/event`; the Worker validates them against the location dataset (`src/engine/analytics.ts`) and writes one data point to the `tufts_is_it_open_events` dataset via the `ANALYTICS` binding. Events:
+## Usage and rollout checks
 
-| Event | Recorded as | Not recorded |
-| --- | --- | --- |
-| Card opened (tap or `#loc-…` deep link) | `location_view`, location id, category | |
-| Search snapshot (1 s after typing stops) | `search`, query length, visible result count after category/open-only filters | the query text |
-| Category change | `filter`, category id | |
-| *Open now* toggle | `filter`, `open_only`, 1 / 0 | |
+Live data polls every two minutes while visible and online. Hidden/offline tabs pause polling; returning to a stale tab or reconnecting refreshes it without overlapping requests. Failed polls retry after two minutes. Statuses still update locally every 30 seconds, with unchanged freshness limits.
 
-Search snapshots can include paused prefixes; they are not a count of submitted searches. Clearing the input (including Escape) cancels pending tracking and lets the same term be counted again.
+Production logs use 10% sampling (including failure logs); development uses 100%. Temporarily set `observability.head_sampling_rate` to `1` to diagnose an incident, then restore `0.1`. `/healthz` continues to report current feed health.
 
-Data point layout: `index1` is `location_view:<id>` for location views, otherwise the event type; `blob1` is always the event type, `blob2` subject (location id, category, or `open_only`), `blob3` location category, `double1` query length or toggle state, `double2` visible result count. Existing SQL using `blob1` works across old and new indexes. Unknown ids, categories, or event types are rejected with 400. No IPs, user agents, or free text are stored in analytics.
-
-The event endpoint requires same-origin browser headers, limits bodies to 512 bytes while streaming, and throttles to 300 requests per minute per connecting IP per Cloudflare location. IPs are used only as rate-limit keys. This is a best-effort pollution guard, not authentication or an exact global quota; shared networks may share the limit, and scripts can forge origin headers.
-
-### One-time dashboard setup
-
-1. **Web Analytics**: Cloudflare Dashboard → *Analytics & Logs* → *Web Analytics* → *Add a site*. Enter the site hostname (the `workers.dev` hostname or your custom domain), choose the manual JavaScript snippet, and copy the `token` value from it. Paste it into `"CF_BEACON_TOKEN"` in `wrangler.jsonc` and redeploy. You do not need to paste the snippet itself; the Worker renders it. Keep automatic injection disabled to avoid duplicate beacons. If adding a CSP, allow `https://static.cloudflareinsights.com` in `script-src` and `https://cloudflareinsights.com` in `connect-src`.
-2. **Analytics Engine**: nothing to create manually. The dataset in `wrangler.jsonc` is created on first write after `npm run deploy`. Data appears under *Workers & Pages* → the Worker → *Analytics Engine*, or query it with SQL (needs an API token with the *Account Analytics: Read* permission):
-
-```bash
-curl "https://api.cloudflare.com/client/v4/accounts/$ACCOUNT_ID/analytics_engine/sql"   -H "Authorization: Bearer $API_TOKEN"   -d "SELECT blob2 AS location, blob3 AS category, SUM(_sample_interval) AS views
-      FROM tufts_is_it_open_events
-      WHERE blob1 = 'location_view' AND timestamp > NOW() - INTERVAL '7' DAY
-      GROUP BY location, category ORDER BY views DESC"
-```
-
-Always sum `_sample_interval` rather than `COUNT(*)`, because Analytics Engine samples under load. Data is retained for 3 months.
+Before deployment, record seven days of account-wide Worker requests, this Worker's requests and CPU errors, and log volume from Cloudflare. Compare another seven days after deployment, accounting for visitor traffic changes, and confirm new clients make no `/api/event` requests. Review account-wide usage at 70,000 requests/day; treat 90,000/day as urgent. These are manual review thresholds, not automated alerts. Caching saves upstream work but does not eliminate incoming Worker requests from the daily allowance.
 
 ## Updating hours
 
