@@ -3,7 +3,6 @@ import { computeAll } from '../engine/status';
 import { EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
 import { updateHTML } from './update';
 import { cardParts, OPEN_STATES, renderClock } from '../render/render';
-import type { AnalyticsEvent } from '../engine/analytics';
 import type { State } from '../engine/types';
 
 declare global {
@@ -17,12 +16,10 @@ const TICK_MS = 30_000;
 const LIVE_POLL_MS = 120_000;
 const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
-/** Wait for typing to settle before counting a search. */
-const SEARCH_TRACK_MS = 1_000;
 
 const byId = new Map(locations.map((l) => [l.id, l]));
 let live: LiveData = isLiveData(window.__LIVE__) ? window.__LIVE__ : EMPTY_LIVE;
-let disconnected = false;
+let disconnected = !navigator.onLine;
 let pinned = new Set<string>(readJson<string[]>(LS_PINNED) ?? []);
 let cat = readJson<string>(LS_CAT) ?? 'all';
 let query = '';
@@ -67,24 +64,6 @@ function writeJson(key: string, value: unknown): void {
 
 const $ = <T extends Element>(sel: string, root: ParentNode = document): T | null => root.querySelector<T>(sel);
 const $$ = <T extends Element>(sel: string, root: ParentNode = document): T[] => Array.from(root.querySelectorAll<T>(sel));
-
-/* Analytics -------------------------------------------------------------- */
-
-/**
- * Fire-and-forget custom event to the Worker, which validates it and writes a
- * Workers Analytics Engine data point. No PII: ids/categories are from our own
- * dataset and search text never leaves the browser (only its length and hit count).
- */
-function track(event: AnalyticsEvent): void {
-  try {
-    const body = JSON.stringify(event);
-    if (!navigator.sendBeacon?.('/api/event', body)) {
-      void fetch('/api/event', { method: 'POST', body, keepalive: true }).catch(() => undefined);
-    }
-  } catch {
-    /* analytics must never break the page */
-  }
-}
 
 /* Rendering --------------------------------------------------------------- */
 
@@ -192,7 +171,28 @@ function applyFilters(): number {
 
 /* Live data --------------------------------------------------------------- */
 
-async function pollLive(): Promise<void> {
+let pollTimer: ReturnType<typeof setTimeout> | undefined;
+let polling = false;
+let lastSuccess = 0;
+let lastAttempt = -Infinity;
+const canPoll = (): boolean => document.visibilityState === 'visible' && navigator.onLine;
+
+function schedulePoll(): void {
+  clearTimeout(pollTimer);
+  if (!canPoll() || polling) return;
+  const due = Math.max(lastSuccess, lastAttempt) + LIVE_POLL_MS;
+  pollTimer = setTimeout(() => void pollLive(), Math.max(0, due - Date.now()));
+}
+
+async function pollLive(force = false): Promise<void> {
+  if (!canPoll() || polling) return;
+  if (!force && Date.now() - Math.max(lastSuccess, lastAttempt) < LIVE_POLL_MS) {
+    schedulePoll();
+    return;
+  }
+  clearTimeout(pollTimer);
+  polling = true;
+  lastAttempt = Date.now();
   try {
     const res = await fetch('/api/live', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
     if (!res.ok) throw new Error('Live request failed');
@@ -200,11 +200,14 @@ async function pollLive(): Promise<void> {
     const data: unknown = await res.json();
     if (!isLiveData(data)) throw new Error('Invalid live response');
     live = data;
-    disconnected = false;
+    disconnected = !navigator.onLine;
+    lastSuccess = Date.now();
   } catch {
     disconnected = true;
   }
+  polling = false;
   refresh();
+  schedulePoll();
 }
 
 /* Wiring ------------------------------------------------------------------ */
@@ -215,24 +218,12 @@ function init(): void {
   const openBtn = document.getElementById('open-only');
   const filters = $$<HTMLButtonElement>('.filter');
 
-  let searchTimer: ReturnType<typeof setTimeout> | undefined;
-  let trackedQuery = '';
   q?.addEventListener('input', () => {
     query = q.value.trim().toLowerCase();
     applyFilters();
-    clearTimeout(searchTimer);
-    if (!query) trackedQuery = '';
-    if (query && query !== trackedQuery) {
-      searchTimer = setTimeout(() => {
-        trackedQuery = query;
-        track({ type: 'search', length: query.length, results: applyFilters() });
-      }, SEARCH_TRACK_MS);
-    }
   });
   q?.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') {
-      clearTimeout(searchTimer);
-      trackedQuery = '';
       q.value = '';
       query = '';
       applyFilters();
@@ -244,7 +235,6 @@ function init(): void {
     openOnly = !openOnly;
     openBtn.setAttribute('aria-pressed', openOnly ? 'true' : 'false');
     applyFilters();
-    track({ type: 'filter', key: 'open_only', on: openOnly });
   });
 
   for (const f of filters) {
@@ -258,7 +248,6 @@ function init(): void {
         other.setAttribute('aria-pressed', active ? 'true' : 'false');
       }
       applyFilters();
-      track({ type: 'filter', key: 'category', value: cat });
       f.scrollIntoView({ inline: 'center', block: 'nearest', behavior: 'smooth' });
     });
     if ((f.dataset.cat ?? 'all') === cat) {
@@ -279,16 +268,6 @@ function init(): void {
     if (card?.dataset.id) togglePin(card.dataset.id);
   });
 
-  // A card expanding (tap or deep link) counts as a location view. `toggle` does not bubble, so capture it.
-  document.addEventListener(
-    'toggle',
-    (e) => {
-      const card = e.target as HTMLDetailsElement;
-      if (card.open && card.classList.contains('card') && card.dataset.id) track({ type: 'location_view', id: card.dataset.id });
-    },
-    true,
-  );
-
   // Deep link: /#loc-dewick opens that card.
   if (location.hash.startsWith('#loc-')) {
     const card = document.getElementById(location.hash.slice(1)) as HTMLDetailsElement | null;
@@ -307,16 +286,27 @@ function init(): void {
     if (document.visibilityState === 'visible') {
       refresh();
       void pollLive();
+    } else {
+      clearTimeout(pollTimer);
     }
   });
   window.addEventListener('focus', refresh);
-  window.addEventListener('online', () => void pollLive());
-  window.addEventListener('offline', () => { disconnected = true; refresh(); });
-  setInterval(() => void pollLive(), LIVE_POLL_MS);
+  window.addEventListener('online', () => void pollLive(true));
+  window.addEventListener('offline', () => {
+    clearTimeout(pollTimer);
+    disconnected = true;
+    refresh();
+  });
 
   // If the server-rendered snapshot is old (cached), pull fresh live data now.
   const renderedAt = window.__RENDERED_AT__ ? Date.parse(window.__RENDERED_AT__) : 0;
-  if (!renderedAt || now().getTime() - renderedAt > 60_000) void pollLive();
+  const renderAge = now().getTime() - renderedAt;
+  if (!renderedAt || !Number.isFinite(renderAge) || renderAge > 60_000) {
+    void pollLive(true);
+  } else {
+    lastSuccess = Date.now() - Math.max(0, renderAge);
+    schedulePoll();
+  }
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
