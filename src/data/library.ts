@@ -6,13 +6,13 @@ const LATE = 'Tufts ID only · late-night study';
 
 // Tisch building hours (Fall 2026, from LibCal lid 20832). Public access ends 9 PM daily.
 const tischWeek: WeekHours = [
-  [r('8:45am', '9pm', PUBLIC), r('9pm', '4am', LATE)], // Sun
-  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE)], // Mon
-  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE)],
-  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE)],
-  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE)], // Thu
-  [r('7:45am', '9pm', PUBLIC), r('9pm', '10:45pm', LATE)], // Fri
-  [r('8:45am', '9pm', PUBLIC), r('9pm', '10:45pm', LATE)], // Sat
+  [r('8:45am', '9pm', PUBLIC), r('9pm', '4am', LATE, 'special')], // Sun
+  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE, 'special')], // Mon
+  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE, 'special')],
+  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE, 'special')],
+  [r('7:45am', '9pm', PUBLIC), r('9pm', '4am', LATE, 'special')], // Thu
+  [r('7:45am', '9pm', PUBLIC), r('9pm', '10:45pm', LATE, 'special')], // Fri
+  [r('8:45am', '9pm', PUBLIC), r('9pm', '10:45pm', LATE, 'special')], // Sat
 ];
 
 export const library: Location[] = [
@@ -54,11 +54,11 @@ export const library: Location[] = [
     building: 'Mugar Hall, 1st floor (Fletcher School)',
     description: 'Fletcher School library, open to all Tufts students. Public access ends 9 PM.',
     hours: [
-      [r('10am', '11pm')], // Sun
-      [r('8am', '11pm')],
-      [r('8am', '11pm')],
-      [r('8am', '11pm')],
-      [r('8am', '11pm')],
+      [r('10am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')], // Sun
+      [r('8am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')],
+      [r('8am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')],
+      [r('8am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')],
+      [r('8am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')],
       [r('8am', '7pm')], // Fri
       [r('10am', '7pm')], // Sat
     ],
@@ -67,7 +67,7 @@ export const library: Location[] = [
     periods: [
       {
         period: 'thanksgiving-2026',
-        hours: [[r('10am', '11pm')], [], [], [r('8am', '5pm')], [], [], []],
+        hours: [[r('10am', '9pm'), r('9pm', '11pm', 'Tufts ID only', 'special')], [], [], [r('8am', '5pm')], [], [], []],
         note: 'Thanksgiving recess hours',
       },
       {

@@ -91,8 +91,6 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
     return { hours: h, note: ov.note, source: 'override' };
   }
 
-  if (uncertain(loc.confidence)) return regular();
-
   // 2. University holidays. A location with no published hours (card access, appointments) is
   //    not reported "Closed for <holiday>" unless it opts in; its hours stay unknown.
   const holiday = cal.holidays.find((h) => h.date === key);
@@ -121,6 +119,7 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
     if (spec === 'unknown') {
       return { hours: 'unknown', note: specific?.note ?? `${period.name}: hours not published yet`, source: 'period' };
     }
+    if (!specific && uncertain(loc.confidence)) return regular();
     return { hours: spec[dow] ?? [], note: specific?.note ?? `${period.name} hours`, source: 'period' };
   }
 
@@ -284,19 +283,21 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
   if (span) {
     const closingSoon = loc.closingSoonMinutes ?? 30;
     const minutesToEnd = span.end - m;
-    const period = raw.find((i) => i.label && i.start <= m && m < i.end);
+    const period = raw.find((i) => (i.label || i.access) && i.start <= m && m < i.end);
     const reopens = spans.find((s) => s.start >= span.end);
 
     let state: State;
-    if (isTransit) state = 'running';
-    else if (loc.access === 'appointment') state = 'appointment';
-    else if (loc.access === 'special' || (loc.id === 'tisch-library' && period && period.label !== 'Open to public')) state = 'special';
+    if (period?.access === 'unknown') state = 'unknown';
+    else if (isTransit) state = 'running';
+    else if ((period?.access ?? loc.access) === 'appointment') state = 'appointment';
+    else if ((period?.access ?? loc.access) === 'special') state = 'special';
     else state = minutesToEnd <= closingSoon ? 'closing_soon' : 'open';
 
     const endTime = fmtTime(span.end);
     const verb = isTransit ? 'Runs until' : 'Closes';
     let detail = minutesToEnd <= 90 ? `${verb} ${endTime} (in ${fmtMinutesUntil(minutesToEnd)})` : `${verb} ${endTime}`;
     if (reopens) detail += `, back ${fmtTime(reopens.start)}`;
+    if (state === 'unknown') detail = 'Access hours unconfirmed; check the official page';
 
     return {
       ...base,

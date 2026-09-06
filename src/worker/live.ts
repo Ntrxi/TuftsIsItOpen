@@ -6,6 +6,9 @@
 import type { DateOverride, DayHours, Interval } from '../engine/types';
 import { usableLive, type LiveData } from '../engine/live';
 import { record, dateKey } from '../engine/validation';
+import { calendar, locations } from '../data';
+import { resolveDay } from '../engine/status';
+import { sameHours } from '../engine/format';
 import { addDays, toLocal } from '../engine/time';
 
 const FETCH_TIMEOUT_MS = 6000;
@@ -24,10 +27,10 @@ async function getJson(url: string, init: RequestInit = {}): Promise<unknown> {
 /* LibCal (Tisch Library hours) ------------------------------------------- */
 
 const LIBCAL_IID = 1412;
-const LIBCAL_LOCATIONS: { lid: number; locId: string; splitLateNight?: boolean }[] = [
+const LIBCAL_LOCATIONS: { lid: number; locId: string; splitLateNight?: boolean; publicUntil?: number }[] = [
   { lid: 20832, locId: 'tisch-library', splitLateNight: true },
   { lid: 20836, locId: 'tisch-dds' },
-  { lid: 15418, locId: 'ginn-library' },
+  { lid: 15418, locId: 'ginn-library', publicUntil: 1260 },
   { lid: 14360, locId: 'lilly-music-library' },
 ];
 
@@ -40,17 +43,17 @@ function libcalDays(entry: unknown): Map<string, LibCalDay> {
   if (!record(entry) || !Array.isArray(entry.weeks)) throw new Error('Invalid LibCal location');
   const days = new Map<string, LibCalDay>();
   for (const week of entry.weeks) {
-    if (!record(week)) throw new Error('Invalid LibCal week');
+    if (!record(week)) continue;
     for (const day of Object.values(week)) {
       if (!record(day) || !dateKey(day.date) || !record(day.times) ||
-          typeof day.times.status !== 'string' || !['open', 'closed', '24hours', 'not-set'].includes(day.times.status)) throw new Error('Invalid LibCal day');
+          typeof day.times.status !== 'string' || !['open', 'closed', '24hours', 'not-set'].includes(day.times.status)) continue;
       const times = day.times;
       if (times.status === 'open' && (!Array.isArray(times.hours) || !times.hours.length || !times.hours.every((h) =>
         record(h) && typeof h.from === 'string' && typeof h.to === 'string' &&
-        parseLibCalTime(h.from) !== undefined && parseLibCalTime(h.to) !== undefined))) throw new Error('Invalid LibCal hours');
+        parseLibCalTime(h.from) !== undefined && parseLibCalTime(h.to) !== undefined))) continue;
       if (days.has(day.date)) throw new Error('Duplicate LibCal date');
       days.set(day.date, { date: day.date, times: { status: day.times.status,
-        hours: Array.isArray(times.hours) ? times.hours.map((h: Record<string, unknown>) => ({ from: String(h.from), to: String(h.to) })) : undefined } });
+        hours: times.status === 'open' && Array.isArray(times.hours) ? times.hours.map((h: Record<string, unknown>) => ({ from: String(h.from), to: String(h.to) })) : undefined } });
     }
   }
   return days;
@@ -85,7 +88,7 @@ function libcalDayHours(day: LibCalDay, splitLateNight: boolean, publicHours?: D
       const start = cuts[i]!;
       const end = cuts[i + 1]!;
       const isPublic = publicHours?.some((p) => p.start <= start && p.end >= end);
-      out.push({ start, end, label: publicHours === undefined ? 'Access hours unconfirmed' : isPublic ? 'Open to public' : 'Tufts ID only · late-night study' });
+      out.push({ start, end, access: publicHours === undefined ? 'unknown' : isPublic ? undefined : 'special', label: publicHours === undefined ? 'Access hours unconfirmed' : isPublic ? 'Open to public' : 'Tufts ID only · late-night study' });
     }
   }
   return out;
@@ -106,7 +109,10 @@ async function libcalOverrides(todayKey: string): Promise<NutrisliceResult> {
   for (const cfg of LIBCAL_LOCATIONS) {
     try {
       const days = readLocation(cfg.lid);
-      const publicDays = cfg.splitLateNight ? readLocation(20834) : undefined;
+      let publicDays: Map<string, LibCalDay> | undefined;
+      if (cfg.splitLateNight) {
+        try { publicDays = readLocation(20834); } catch { /* Building hours remain usable; access is unknown. */ }
+      }
       if (!days.has(todayKey) || !days.has(addDays(todayKey, -1))) throw new Error('LibCal missing current or previous date');
       out[cfg.locId] = [];
       for (const [date, day] of days) {
@@ -123,8 +129,15 @@ async function libcalOverrides(todayKey: string): Promise<NutrisliceResult> {
             publicHours = [...(a === 'closed' ? [] : a), ...(Array.isArray(b) ? b.map((h) => ({ ...h, start: h.start + 1440, end: h.end + 1440 })) : [])];
           }
         }
-        const hours = libcalDayHours(day, cfg.splitLateNight ?? false, publicHours);
-        out[cfg.locId]!.push({ from: date, hours: hours ?? 'unknown', note: hours === undefined ? 'Library calendar hours not published' : 'Hours from the library calendar' });
+        if (cfg.publicUntil !== undefined) publicHours = [{ start: 0, end: cfg.publicUntil }];
+        let hours = libcalDayHours(day, cfg.splitLateNight || cfg.publicUntil !== undefined, publicHours);
+        if (cfg.publicUntil !== undefined && Array.isArray(hours)) {
+          hours = hours.map(({ start, end, access }) => access ? { start, end, access, label: 'Tufts ID only' } : { start, end });
+        }
+        if (hours === undefined) continue;
+        const baseline = resolveDay(locations.find((loc) => loc.id === cfg.locId)!, date, calendar).hours;
+        if (baseline !== 'unknown' && sameHours(hours === 'closed' ? [] : hours, baseline)) continue;
+        out[cfg.locId]!.push({ from: date, hours, note: 'Hours from the library calendar' });
       }
     } catch (error) {
       failed.push(cfg.locId);
@@ -196,7 +209,7 @@ interface MenuDay {
   hasFood: boolean;
 }
 
-const CLOSED_RE = /\b(closed|closing|closures?|holiday|break|no service|not open)\b/i;
+const CLOSED_RE = /\b(close[ds]?|closing|closures?|holiday|break|no service|not open)\b/i;
 
 /** Summarize one menu's day; undefined when nothing is published for it (no food and no notice). */
 function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
@@ -217,7 +230,7 @@ function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | u
   const quoted = texts.map((t) => `“${t}”`).join(', ');
   const allClosed = menus.every((m) => m.text && !m.hasFood && CLOSED_RE.test(m.text));
   if (allClosed) return { from: date, hours: 'closed', note: `Closed: ${quoted} (per Tufts Dining menu)` };
-  if (texts.some((text) => CLOSED_RE.test(text))) return { from: date, hours: 'unknown', note: `Dining service differs by meal; confirm hours: ${quoted}` };
+  if (menus.some((m) => !m.hasFood && CLOSED_RE.test(m.text))) return { from: date, hours: 'unknown', note: `Dining service differs by meal; confirm hours: ${quoted}` };
   return { from: date, note: `Tufts Dining notice: ${quoted}` };
 }
 
@@ -291,15 +304,18 @@ async function passioVehicles(): Promise<Record<string, number>> {
   const counts: Record<string, number> = {};
   const seen = new Set<string>();
   for (const id of new Set(Object.values(ROUTE_TO_LOC))) counts[id] = 0;
+  let valid = 0;
+  let invalid = 0;
   const walk = (node: unknown): void => {
     if (Array.isArray(node)) {
       node.forEach(walk);
     } else if (node && typeof node === 'object') {
       const obj = node as Record<string, unknown>;
       if ('routeId' in obj || 'busId' in obj) {
-        if (!['string', 'number'].includes(typeof obj.routeId) || !['string', 'number'].includes(typeof obj.busId)) throw new Error('Invalid Passio vehicle');
-        if (obj.outOfService !== undefined && !['0', '1'].includes(String(obj.outOfService))) throw new Error('Invalid Passio service flag');
-        if (obj.outdated !== undefined && !['0', '1'].includes(String(obj.outdated))) throw new Error('Invalid Passio freshness flag');
+        if (!['string', 'number'].includes(typeof obj.routeId) || !['string', 'number'].includes(typeof obj.busId)) { invalid++; return; }
+        if (obj.outOfService !== undefined && !['0', '1'].includes(String(obj.outOfService))) { invalid++; return; }
+        if (obj.outdated !== undefined && !['0', '1'].includes(String(obj.outdated))) { invalid++; return; }
+        valid++;
         if (String(obj.outOfService ?? '0') === '1') return;
         if (String(obj.outdated ?? '0') === '1' || seen.has(String(obj.busId))) return;
         seen.add(String(obj.busId));
@@ -309,10 +325,11 @@ async function passioVehicles(): Promise<Record<string, number>> {
       }
       Object.values(obj).forEach(walk);
     } else {
-      throw new Error('Invalid Passio node');
+      invalid++;
     }
   };
   walk(json.buses ?? {});
+  if (invalid && !valid) throw new Error('No readable Passio vehicles');
   return counts;
 }
 
@@ -342,5 +359,5 @@ export async function fetchAllLive(now: Date): Promise<LiveData> {
 }
 
 /** Exposed for tests. */
-export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride, parseNutrisliceWeek, libcalDays };
+export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride, parseNutrisliceWeek, libcalDays, LIBCAL_LOCATIONS, NUTRISLICE };
 export type { Interval };

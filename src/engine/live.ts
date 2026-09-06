@@ -20,6 +20,7 @@ export const EMPTY_LIVE: LiveData = { fetchedAt: '', overrides: {}, vehicles: {}
 
 export const HOURS_MAX_AGE_MS = 15 * 60_000;
 export const VEHICLES_MAX_AGE_MS = 3 * 60_000;
+export const CLOCK_SKEW_TOLERANCE_MS = 3 * 60_000;
 export const FEED_LOCATIONS = {
   library: ['tisch-library', 'tisch-dds', 'ginn-library', 'lilly-music-library'],
   dining: ['dewick', 'carmichael', 'commons', 'hodgdon', 'hotung', 'kindlevan', 'mugar-cafe', 'pax-et-lox', 'tower-cafe', 'smfa-cafe'],
@@ -44,20 +45,23 @@ export function isLiveData(value: unknown): value is LiveData {
 /** Expire by the original fetch time on both server and client. Failure never restores static hours. */
 export function usableLive(data: LiveData, at: Date, disconnected = false): LiveData {
   const age = at.getTime() - Date.parse(data.fetchedAt);
-  const expired = !Number.isFinite(age) || age < -60_000 || age >= HOURS_MAX_AGE_MS;
+  const expired = !Number.isFinite(age) || age < -CLOCK_SKEW_TOLERANCE_MS || age >= HOURS_MAX_AGE_MS;
   const failed = new Set(data.failedLocations ?? []);
   const sources = { ...data.sources };
   for (const [source, ids] of Object.entries(FEED_LOCATIONS)) {
     const wholeProviderFailed = sources[source] === 'error' && !ids.some((id) => failed.has(id));
-    if (expired || disconnected || !sources[source] || wholeProviderFailed || sources[source] === 'empty') {
+    if (expired || !sources[source] || wholeProviderFailed || sources[source] === 'empty') {
       ids.forEach((id) => failed.add(id));
       sources[source] = 'error';
     }
   }
-  const overrides = expired || disconnected ? {} : { ...data.overrides };
+  if (disconnected) {
+    for (const id of Object.keys(sources)) if (sources[id] === 'ok') sources[id] = 'stale';
+  }
+  const overrides = expired ? {} : { ...data.overrides };
   const key = toLocal(at).key;
   for (const id of failed) overrides[id] = [{ from: addDays(key, -1), to: addDays(key, 60), hours: 'unknown', note: 'Live hours unavailable; check the official source' }];
-  const vehiclesExpired = expired || disconnected || age >= VEHICLES_MAX_AGE_MS || sources.shuttles !== 'ok';
+  const vehiclesExpired = expired || age >= VEHICLES_MAX_AGE_MS || !['ok', 'stale'].includes(sources.shuttles ?? '');
   if (vehiclesExpired) sources.shuttles = 'error';
   return { ...data, overrides, sources, failedLocations: [...failed], vehicles: vehiclesExpired ? {} : data.vehicles };
 }

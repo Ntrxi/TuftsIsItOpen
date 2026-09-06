@@ -1,6 +1,6 @@
 import { calendar, locations } from '../data';
 import { computeAll } from '../engine/status';
-import { EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
+import { CLOCK_SKEW_TOLERANCE_MS, EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
 import { updateHTML } from './update';
 import { cardParts, OPEN_STATES, renderClock } from '../render/render';
 import type { State } from '../engine/types';
@@ -32,7 +32,7 @@ let openOnly = false;
  * The server's time (the render timestamp, then the Date header of live responses) corrects it.
  * Either may come from a cache up to ~90 s old, so only a clearly larger skew is applied.
  */
-const SKEW_THRESHOLD_MS = 3 * 60_000;
+const SKEW_THRESHOLD_MS = CLOCK_SKEW_TOLERANCE_MS;
 let clockSkewMs = 0;
 
 function noteServerTime(iso: string | null | undefined): void {
@@ -193,8 +193,11 @@ async function pollLive(force = false): Promise<void> {
   clearTimeout(pollTimer);
   polling = true;
   lastAttempt = Date.now();
+  // AbortController rather than AbortSignal.timeout: the latter is missing in older mobile browsers.
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
   try {
-    const res = await fetch('/api/live', { headers: { accept: 'application/json' }, signal: AbortSignal.timeout(10_000) });
+    const res = await fetch('/api/live', { headers: { accept: 'application/json' }, signal: controller.signal });
     if (!res.ok) throw new Error('Live request failed');
     noteServerTime(res.headers.get('date'));
     const data: unknown = await res.json();
@@ -204,6 +207,8 @@ async function pollLive(force = false): Promise<void> {
     lastSuccess = Date.now();
   } catch {
     disconnected = true;
+  } finally {
+    clearTimeout(timeout);
   }
   polling = false;
   refresh();

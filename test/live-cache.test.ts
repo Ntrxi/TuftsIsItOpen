@@ -37,12 +37,21 @@ describe('live snapshot cache and health', () => {
     expect((await request('/healthz')).status).toBe(503);
     expect(console.warn).toHaveBeenCalled();
   });
-  it('marks a background-refresh snapshot stale and hides shuttle counts', async () => {
+  it('accepts idle cached successes without a fan-out, and retains stale counts until their TTL', async () => {
     await request('/api/live');
     vi.setSystemTime(new Date(NOW.getTime() + 90_000));
     const stale = await request('/healthz');
-    expect(stale.status).toBe(503);
+    expect(stale.status).toBe(200);
     expect((await stale.json() as { sources: LiveData['sources'] }).sources.library).toBe('stale');
+    const calls = vi.mocked(fetch).mock.calls.length;
+    vi.setSystemTime(new Date(NOW.getTime() + 5 * 60_000));
+    expect((await request('/healthz')).status).toBe(200);
+    expect(vi.mocked(fetch).mock.calls.length).toBe(calls);
+    expect(pending).toHaveLength(0);
+    vi.setSystemTime(new Date(NOW.getTime() + 90_000));
+    const live = await (await request('/api/live')).json() as LiveData;
+    expect(live.vehicles['davis-shuttle']).toBe(1);
+    expect(live.sources.shuttles).toBe('stale');
     await Promise.all(pending);
     expect((await request('/healthz')).status).toBe(200);
   });

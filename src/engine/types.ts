@@ -18,6 +18,8 @@ export interface Interval {
   end: number;
   /** Optional label, e.g. "Breakfast", "Rec swim", "Staffed". */
   label?: string;
+  /** Access during this interval, independent of its display label. */
+  access?: AccessMode | 'unknown';
 }
 
 /** A day's hours. Empty array = closed all day. */
