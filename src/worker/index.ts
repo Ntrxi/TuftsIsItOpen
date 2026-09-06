@@ -50,7 +50,8 @@ async function readEventBody(request: Request): Promise<string | null> {
 const LIVE_FRESH_MS = 60_000;
 /** Hard cap on how old a snapshot may be before we block on a fresh fetch. */
 const LIVE_MAX_AGE_MS = 15 * 60_000;
-const LIVE_CACHE_KEY = 'https://live.tufts-is-it-open.internal/snapshot';
+// Older snapshots lack structured interval access and must be fetched again.
+const LIVE_CACHE_KEY = 'https://live.tufts-is-it-open.internal/snapshot-v2';
 
 let memory: { data: LiveData; at: number } | undefined;
 let inflight: Promise<LiveData> | undefined;
@@ -81,7 +82,7 @@ async function refreshLive(ctx: ExecutionContext): Promise<LiveData> {
   }
 }
 
-async function getLive(ctx: ExecutionContext): Promise<LiveData> {
+async function getLive(ctx: ExecutionContext, healthCheck = false): Promise<LiveData> {
   if (!memory) {
     try {
       const hit = await edgeCache().match(LIVE_CACHE_KEY);
@@ -94,6 +95,10 @@ async function getLive(ctx: ExecutionContext): Promise<LiveData> {
     }
   }
   const age = memory ? Date.now() - memory.at : Infinity;
+  // Readiness accepts cached provider successes until the hours TTL; probes do not refresh every minute.
+  if (healthCheck && memory && age >= 0 && age < LIVE_MAX_AGE_MS) {
+    return { ...memory.data, sources: age < LIVE_FRESH_MS ? memory.data.sources : markStale(memory.data.sources) };
+  }
   if (memory && age >= 0 && age < LIVE_FRESH_MS) return usableLive(memory.data, new Date());
   if (memory && age < LIVE_MAX_AGE_MS) {
     ctx.waitUntil(refreshLive(ctx).catch(() => undefined));
@@ -215,8 +220,8 @@ export default {
     }
 
     if (path === '/healthz') {
-      const live = await getLive(ctx);
-      const ok = ['library', 'dining', 'shuttles'].every((id) => live.sources[id] === 'ok') && !live.failedLocations?.length;
+      const live = await getLive(ctx, true);
+      const ok = ['library', 'dining', 'shuttles'].every((id) => ['ok', 'stale'].includes(live.sources[id] ?? '')) && !live.failedLocations?.length;
       return json({ ok, fetchedAt: live.fetchedAt || null, ageSeconds: live.fetchedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(live.fetchedAt)) / 1000)) : null,
         sources: live.sources, failedLocations: live.failedLocations ?? [] },
       { status: ok ? 200 : 503, headers: { 'cache-control': 'no-store' } });

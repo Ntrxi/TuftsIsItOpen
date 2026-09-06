@@ -40,7 +40,7 @@ function chips(loc: Location, st: Status): string {
   }
   if (loc.confidence === 'low') {
     out.push('<span class="chip chip-low" title="Hours could not be verified against a current official source">Unverified</span>');
-  } else if (loc.confidence === 'medium') {
+  } else if (loc.confidence === 'medium' && st.state !== 'unknown') {
     out.push('<span class="chip chip-medium" title="Hours vary or the official sources disagree; confirm before a special trip">Confirm hours</span>');
   }
   return out.join('');

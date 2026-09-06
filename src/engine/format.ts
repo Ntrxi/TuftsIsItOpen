@@ -61,7 +61,7 @@ export function sameHours(a: DayHours, b: DayHours): boolean {
   if (a.length !== b.length) return false;
   return a.every((x, i) => {
     const y = b[i]!;
-    return x.start === y.start && x.end === y.end && (x.label ?? '') === (y.label ?? '');
+    return x.start === y.start && x.end === y.end && (x.label ?? '') === (y.label ?? '') && x.access === y.access;
   });
 }
 
@@ -79,9 +79,9 @@ export function t(text: string): number {
 }
 
 /** Interval builder: r('7am','9pm','Dinner'). End earlier than start means overnight. */
-export function r(start: string, end: string, label?: string): Interval {
+export function r(start: string, end: string, label?: string, access?: Interval['access']): Interval {
   const s = t(start);
   let e = t(end);
   if (e <= s) e += 1440;
-  return label ? { start: s, end: e, label } : { start: s, end: e };
+  return { start: s, end: e, ...(label ? { label } : {}), ...(access ? { access } : {}) };
 }

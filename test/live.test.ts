@@ -16,9 +16,9 @@ describe('LibCal day parsing', () => {
   it('splits a 24-hour day at the public cutoff like any other Tisch day', () => {
     const day = { date: '2026-12-16', times: { status: '24hours' } };
     expect(libcalDayHours(day, true, [{ start: 465, end: 1260 }])).toEqual([
-      { start: 0, end: 465, label: 'Tufts ID only · late-night study' },
+      { start: 0, end: 465, access: 'special' as const, label: 'Tufts ID only · late-night study' },
       { start: 465, end: 1260, label: 'Open to public' },
-      { start: 1260, end: 1440, label: 'Tufts ID only · late-night study' },
+      { start: 1260, end: 1440, access: 'special' as const, label: 'Tufts ID only · late-night study' },
     ]);
     expect(libcalDayHours(day, false)).toEqual([{ start: 0, end: 1440 }]);
   });
@@ -26,7 +26,7 @@ describe('LibCal day parsing', () => {
     const loc = locations.find((l) => l.id === 'tisch-library')!;
     const hours = libcalDayHours({ date: '2026-09-10', times: { status: '24hours' } }, true, [{ start: 465, end: 1260 }])!;
     const live = { [loc.id]: [
-      { from: '2026-09-09', hours: [{ start: 1260, end: 1680, label: 'Tufts ID only · late-night study' }], note: '' },
+      { from: '2026-09-09', hours: [{ start: 1260, end: 1680, access: 'special' as const, label: 'Tufts ID only · late-night study' }], note: '' },
       { from: '2026-09-10', hours, note: '' },
     ] };
     const midnight = computeStatus(loc, calendar, localToDate('2026-09-10', 60), live);
@@ -83,4 +83,22 @@ describe('Nutrislice weekly menu parsing', () => {
     expect(nutrisliceDayOverride('2026-09-08', [served, served, served])).toBeUndefined();
     expect(nutrisliceDayOverride('2026-09-08', [])).toBeUndefined();
   });
+});
+
+
+it.each(['Labor Day holiday weekend menu', 'Spring break menu', 'Cafe closes at 5'])('keeps a banner with food as a notice: %s', (text) => {
+  expect(nutrisliceDayOverride('2026-09-10', [{ text, hasFood: true }, served])?.hours).toBeUndefined();
+});
+it.each(['We close for maintenance', 'Cafe closes today'])('recognizes closure wording without food: %s', (text) => {
+  expect(nutrisliceDayOverride('2026-09-10', [{ text, hasFood: false }])?.hours).toBe('closed');
+});
+it.each(['tisch-library', 'ginn-library'])('uses structured access for %s independently of labels', (id) => {
+  const loc = locations.find((l) => l.id === id)!;
+  const hours = libcalDayHours({ date: '2026-09-10', times: { status: '24hours' } }, true)!;
+  expect(computeStatus(loc, calendar, localToDate('2026-09-10', 600), {
+    [id]: [{ from: '2026-09-10', hours, note: '' }],
+  }).state).toBe('unknown');
+  expect(computeStatus(loc, calendar, localToDate('2026-09-10', 1320), {
+    [id]: [{ from: '2026-09-10', hours: [{ start: 1260, end: 1380, access: 'special', label: 'Different wording' }], note: '' }],
+  }).state).toBe('special');
 });

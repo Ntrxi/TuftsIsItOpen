@@ -32,7 +32,7 @@ it('preserves focused controls and links during status text updates and skips un
   expect(document.activeElement?.getAttribute('href')).toBe('https://tufts.edu');
 });
 
-it('removes live counts and hours when client polls fail, including HTTP and invalid JSON', async () => {
+it('retains recent data through failures, expires by age, and recovers without AbortSignal.timeout', async () => {
   vi.resetModules();
   vi.useFakeTimers();
   const now = new Date('2026-09-10T16:00:00Z');
@@ -42,17 +42,34 @@ it('removes live counts and hours when client polls fail, including HTTP and inv
   window.__LIVE__ = data;
   window.__RENDERED_AT__ = now.toISOString();
   document.body.innerHTML = locations.filter((l) => ['carmichael', 'davis-shuttle'].includes(l.id)).map((l) => renderCard(l, computeStatus(l, calendar, now, data.overrides), data)).join('');
+  vi.stubGlobal('AbortSignal', { timeout: undefined });
   vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
   await import('../src/client/main');
   document.dispatchEvent(new Event('DOMContentLoaded'));
   expect(document.body.textContent).toContain('3 buses live');
+  window.dispatchEvent(new Event('offline'));
+  expect(document.body.textContent).toContain('3 buses live');
   await vi.advanceTimersByTimeAsync(120_000);
-  expect(document.body.textContent).not.toContain('3 buses live');
-  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('unknown');
-  vi.mocked(fetch).mockResolvedValue(new Response(JSON.stringify(data)));
-  await vi.advanceTimersByTimeAsync(120_000);
+  expect(fetch).toHaveBeenCalled();
+  expect(document.body.textContent).toContain('3 buses live');
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
   vi.mocked(fetch).mockResolvedValue(new Response('{"overrides":{}}'));
   await vi.advanceTimersByTimeAsync(120_000);
+  expect(document.body.textContent).not.toContain('3 buses live');
+  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
+  // Timeout must abort, but cannot erase hours inside their TTL.
+  let signal: AbortSignal | undefined;
+  vi.mocked(fetch).mockImplementation((_url, init) => {
+    signal = init?.signal ?? undefined;
+    return new Promise((_resolve, reject) => signal?.addEventListener('abort', () => reject(new Error('timeout'))));
+  });
+  await vi.advanceTimersByTimeAsync(130_000);
+  expect(signal?.aborted).toBe(true);
+  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
+  await vi.advanceTimersByTimeAsync(9 * 60_000);
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('unknown');
+  vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ ...data, fetchedAt: new Date().toISOString() })));
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
+  expect(document.body.textContent).toContain('3 buses live');
 });

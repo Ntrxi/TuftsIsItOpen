@@ -12,5 +12,6 @@ export function dayHours(value: unknown): boolean {
   return Array.isArray(value) && value.every((i) => record(i) &&
     Number.isInteger(i.start) && Number.isInteger(i.end) &&
     Number(i.start) >= 0 && Number(i.start) < 2880 && Number(i.end) > Number(i.start) && Number(i.end) <= 2880 &&
-    (i.label === undefined || typeof i.label === 'string'));
+    (i.label === undefined || typeof i.label === 'string') &&
+    (i.access === undefined || ['open', 'special', 'appointment', 'unknown'].includes(String(i.access))));
 }

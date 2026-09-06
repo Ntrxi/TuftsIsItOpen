@@ -424,3 +424,14 @@ describe('schedule safety regressions', () => {
     }
   });
 });
+
+
+it('keeps confirmed holiday and break closures for medium-confidence regular hours', () => {
+  const loc: Location = { ...byId('dewick'), confidence: 'medium', holidays: 'closed', breaks: 'closed', overrides: [], periods: [] };
+  expect(resolveDay(loc, '2026-09-07', calendar)).toMatchObject({ hours: [], note: 'Closed for Labor Day' });
+  expect(resolveDay(loc, '2026-11-26', { ...calendar, holidays: [] })).toMatchObject({ hours: [], source: 'period' });
+  expect(resolveDay(loc, '2026-09-10', calendar).hours).toBe('unknown');
+});
+it('marks Ginn access after the public cutoff as special', () => {
+  expect(computeStatus(byId('ginn-library'), calendar, at('2026-09-10', '22:00')).state).toBe('special');
+});
