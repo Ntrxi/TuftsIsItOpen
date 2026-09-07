@@ -81,15 +81,80 @@ function tzOffsetMinutes(at: Date): number {
   return Math.round((asUtc - atMinute) / 60000);
 }
 
-/** Convert a local date key + minutes-since-midnight into an absolute Date. */
+/**
+ * Convert campus wall time to an instant. Calendar arithmetic normalizes overnight
+ * minutes first. Repeated times choose the earlier occurrence; nonexistent times
+ * shift forward by the gap (02:30 becomes 03:30 at the spring transition).
+ */
 export function localToDate(key: string, minutes: number): Date {
   const { y, m, d } = parseKey(key);
   const naive = Date.UTC(y, m - 1, d) + minutes * 60000;
-  let guess = new Date(naive - tzOffsetMinutes(new Date(naive)) * 60000);
-  // One refinement handles DST boundaries.
-  guess = new Date(naive - tzOffsetMinutes(guess) * 60000);
-  return guess;
+  // New York is behind UTC, so this probe precedes a repeated local boundary
+  // and picks its first occurrence. Most dates need only this checked candidate.
+  const offset = tzOffsetMinutes(new Date(naive));
+  const guess = naive - offset * 60000;
+  if (tzOffsetMinutes(new Date(guess)) === offset) return new Date(guess);
+  // Sampling on both sides finds both offsets even when the requested wall time
+  // is inside a gap/fold. These are offset probes, not calendar-day additions.
+  const offsets = new Set([-1, 1].map(day => tzOffsetMinutes(new Date(naive + day * 86400000))));
+  const candidates = [...offsets].map(offset => naive - offset * 60000).sort((a, b) => a - b);
+  const exact = candidates.find(candidate => candidate + tzOffsetMinutes(new Date(candidate)) * 60000 === naive);
+  return new Date(exact ?? candidates[candidates.length - 1]!);
 }
+
+/** Request-scoped conversion reuse. Never retains schedules or live snapshots. */
+export function createTimeContext() {
+  const dates = new Map<string, { local: Omit<LocalTime, 'minutes'>; naive: number; offset?: number }>();
+  const boundaries = new Map<string, number>();
+  const locals = new Map<number, LocalTime>();
+  const windows = new Map<string, { key: string; start: number; end: number; dow: number }[]>();
+  const local = (instant: number): LocalTime => {
+    let result = locals.get(instant);
+    if (!result) { result = toLocal(new Date(instant)); locals.set(instant, result); }
+    return result;
+  };
+  const boundary = (key: string, minutes: number): number => {
+    const date = minutes >= 0 && minutes < 1440 ? key : addDays(key, Math.floor(minutes / 1440));
+    const minute = ((minutes % 1440) + 1440) % 1440;
+    const id = `${date}/${minute}`;
+    const existing = boundaries.get(id);
+    if (existing !== undefined) return existing;
+    let day = dates.get(date);
+    if (!day) {
+      const { y, m, d } = parseKey(date);
+      const naive = Date.UTC(y, m - 1, d);
+      // These probes bracket the entire campus calendar day, including the
+      // early-morning DST transition. Equal offsets permit pure arithmetic for
+      // all of this day's boundaries; transition dates use the checked resolver.
+      const before = tzOffsetMinutes(new Date(naive));
+      const after = tzOffsetMinutes(new Date(naive + 36 * 3600000));
+      day = { naive, local: { key: date, y, m, d, dow: new Date(naive).getUTCDay() }, offset: before === after ? before : undefined };
+      dates.set(date, day);
+    }
+    const instant = day.offset === undefined ? localToDate(date, minute).getTime() : day.naive + (minute - day.offset) * 60000;
+    boundaries.set(id, instant);
+    if (day.offset !== undefined) locals.set(instant, { ...day.local, minutes: minute });
+    return instant;
+  };
+  const window = (key: string, lookahead: number) => {
+    const id = `${key}/${lookahead}`;
+    let days = windows.get(id);
+    if (!days) {
+      const { y, m, d } = parseKey(key);
+      const points = Array.from({ length: lookahead + 3 }, (_, i) => {
+        const date = new Date(Date.UTC(y, m - 1, d + i - 1));
+        const key = dateKey(date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate());
+        return { key, start: boundary(key, 0), dow: date.getUTCDay() };
+      });
+      days = points.slice(0, -1).map((day, i) => ({ ...day, end: points[i + 1]!.start }));
+      windows.set(id, days);
+    }
+    return days;
+  };
+  return { boundary, local, window };
+}
+
+export type TimeContext = ReturnType<typeof createTimeContext>;
 
 export const DAY_NAMES = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 export const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];

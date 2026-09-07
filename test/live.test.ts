@@ -32,7 +32,11 @@ describe('LibCal day parsing', () => {
     const midnight = computeStatus(loc, calendar, localToDate('2026-09-10', 60), live);
     expect(midnight.state).toBe('special');
     expect(midnight.period).toContain('Tufts ID');
-    expect(midnight.changesInMinutes).toBe(1380);
+    // PR #1: the countdown targets the next access transition, not the span close.
+    expect(midnight.changesInMinutes).toBe(405);
+    expect(midnight.nextTransitionAt).toBe('2026-09-10T11:45:00.000Z');
+    expect(midnight.accessChangesAt).toBe(midnight.nextTransitionAt);
+    expect(midnight.closesAt).toBe('2026-09-11T04:00:00.000Z');
     expect(computeStatus(loc, calendar, localToDate('2026-09-10', 600), live).period).toBe('Open to public');
     expect(libcalDayHours({ date: '2026-09-10', times: { status: '24hours' } }, true)?.[0]).toMatchObject({ label: 'Access hours unconfirmed' });
   });
