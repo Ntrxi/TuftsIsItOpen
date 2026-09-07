@@ -133,13 +133,46 @@ Suggested refactor: maintain independent provider snapshots and freshness timest
 - Two browser test files could not start locally because the `jsdom` package was missing from the installed dependencies. Browser behavior should be rerun after dependencies are restored.
 - The issues above were reproduced against the code and test fixtures. Published Tufts schedules were not independently reverified during this review.
 
-## Suggested implementation split
+## Implementation plan
 
-Use focused changes so schedule-policy decisions remain reviewable:
+Use four implementation PRs and one optional architecture PR. Do not one-shot the entire review: the timeline semantics are foundational, and the other fixes should build on a reviewed definition of overnight ownership and DST behavior.
 
-1. Timeline correctness: overnight ownership, midnight continuity, DST conversion, and explicit transition timestamps.
-2. Dining notice interpretation: full-day versus partial-day closures and ambiguous notices.
-3. Transit boundaries: final departure and service-end semantics.
-4. User experience: access-change messaging, overnight date wording, timezone labeling, freshness indicators, and transition-aligned refreshes.
+### PR sequence
 
-Provider caching and broader performance work can follow separately if production request volume or profiling justifies it.
+| PR | Scope | Dependency | Primary model/session | Review session |
+|---|---|---|---|---|
+| 1. Timeline correctness | Overnight override ownership, midnight continuity, DST-safe countdowns, and explicit transition timestamps | First | Strongest reasoning model available, such as GPT-6 Astra or Claude Opus | Independent model, preferably from the other vendor |
+| 2. Dining notice safety | Full-day, partial-day, shortened-hours, and ambiguous Nutrislice notices | Independent of PR 1; may run in parallel | GPT-5.6 Sol/Terra or Claude Sonnet | Independent review focused on false positives |
+| 3. Transit boundaries | Final departure versus service-end behavior, exact-boundary tests, and overnight departures | Wait for PR 1 if both touch `status.ts` | GPT-5.6 Terra/Sol or Claude Sonnet | Lightweight independent test review |
+| 4. UX and client behavior | Access-change messaging, overnight date wording, timezone label, freshness indicators, and refresh alignment | Wait for the status fields from PR 1 | GPT-5.6 Terra or Claude Sonnet | Review rendered behavior and regression coverage |
+| 5. Provider architecture (optional) | Independent provider freshness, caching, and refresh lifecycles | Do after profiling production traffic | Strong coding model | Architecture review before implementation |
+
+PR 1 should keep overnight service, DST, and transition fields together because they depend on the same timeline model. PR 2 can run in parallel with PR 1 in a separate worktree because it is mostly isolated to [live.ts](/C:/Users/aaron/OneDrive/Documents/GitHub/TuftsIsItOpen/src/worker/live.ts:245) and feed tests. PR 3 should wait if it would otherwise compete for `status.ts`; PR 4 should wait until the new status fields and transition semantics are stable.
+
+### Session workflow for each PR
+
+1. **Implementation session:** reproduce each issue, add failing regression tests, implement the smallest coherent change, run relevant tests, typechecking, and the build, then prepare the PR.
+2. **Independent review session:** inspect the diff and tests without editing the implementation first. Ask specifically about semantic regressions, boundary cases, and contradictory output.
+3. **Fix session:** send review findings back to the implementation session or use a fresh session on the same branch to address them.
+4. **Merge gate:** require the full suite to pass, including browser tests after the missing `jsdom` dependency is restored.
+
+Do not have Codex and Claude Code edit the same worktree or branch concurrently. Use separate worktrees for parallel PRs and keep one implementation owner per branch.
+
+### Model roles
+
+- Use Codex for repository exploration, implementation, tests, and integration with the existing codebase.
+- Use Claude Code as an independent reviewer or adversarial test designer, or reverse those roles if Claude is the primary implementation environment.
+- Reserve the strongest model for the initial timeline design and its review. Use faster coding models for the contained parser, transit, UX, and documentation work.
+- Use a small model for documentation, test-case expansion, and mechanical cleanup.
+
+### Prompt constraints
+
+Each implementation session should receive a scope constraint like this:
+
+> Implement only the issues assigned to this PR. Reproduce each issue with regression tests before changing code. Preserve existing schedule-policy behavior unless this PR explicitly changes it. Run relevant tests, the full test suite, typechecking, and the build. Do not modify unrelated providers, UX, or caching code.
+
+PR 1 needs an additional design checkpoint before implementation:
+
+> First propose the interval ownership and DST policy using concrete examples: an overnight interval crossing a closure, a midnight-continuous interval, spring-forward 2:30 AM, and fall-back repeated 1:30 AM. Do not implement until the policy is represented in tests.
+
+Provider caching and broader performance work should remain separate until request-volume or latency evidence justifies it. The current engine benchmark was about 1.4 ms for all 37 locations, so caching is an architectural improvement rather than an urgent correctness fix.
