@@ -70,6 +70,8 @@ function resolveDayHours(loc: Location, key: string, cal: Calendar, ov: DateOver
   const dow = dowOf(key);
   const uncertain = (confidence: Location['confidence']) => confidence === 'low' || confidence === 'medium';
   if (loc.sourceConflict) return { hours: 'unknown', source: 'unknown', note: loc.sourceConflict };
+  const conflict = loc.overrides?.find((o) => o.sourceConflict && inRange(key, o.from, o.to ?? o.from));
+  if (conflict) return { hours: 'unknown', source: 'override', note: conflict.note };
   const regular = (): ResolvedDay => {
     if (key > cal.through || (loc.validThrough && key > loc.validThrough)) {
       return { hours: 'unknown', source: 'unknown', note: 'Current schedule coverage has ended; check the official page' };

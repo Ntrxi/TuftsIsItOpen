@@ -187,7 +187,6 @@ describe('computeStatus', () => {
     expect(st.state).toBe('running');
     expect(st.nextDepartures).toEqual([
       { stop: 'Campus Center', time: '1:30 AM', inMinutes: 25 },
-      { stop: 'Davis Square', time: '1:10 AM', inMinutes: 5 },
     ]);
   });
 
@@ -201,7 +200,7 @@ describe('computeStatus', () => {
     const st = computeStatus(byId('davis-shuttle'), calendar, at('2026-09-14', '14:20')); // Mon
     expect(st.state).toBe('running');
     expect(st.nextDepartures?.find((d) => d.stop === 'Campus Center')?.time).toBe('2:30 PM');
-    expect(st.nextDepartures?.find((d) => d.stop === 'Davis Square')?.time).toBe('2:45 PM');
+    expect(st.nextDepartures).toEqual([{ stop: 'Campus Center', time: '2:30 PM', inMinutes: 10 }]);
   });
 
   it('shows Labor Day special hours and notes', () => {
@@ -251,14 +250,112 @@ describe('computeStatus', () => {
     expect(sun.state).toBe('unknown');
   });
 
-  it('keeps Carmichael closed through the Sep 2026 building issue and reopens for Sunday dinner', () => {
+  it('keeps Carmichael closed through Sep 6, serves Monday dinner only, and resumes regular hours Sep 8', () => {
     const sat = computeStatus(byId('carmichael'), calendar, at('2026-09-05', '12:30'));
     expect(sat.state).toBe('closed');
     expect(sat.scheduleNote).toContain('building issue');
-    expect(sat.detail).toBe('Opens tomorrow 5:00 PM');
-    const sun = computeStatus(byId('carmichael'), calendar, at('2026-09-06', '12:30'));
+    expect(sat.detail).toBe('Opens Mon 5:00 PM');
+    const sun = computeStatus(byId('carmichael'), calendar, at('2026-09-06', '18:00'));
     expect(sun.state).toBe('closed');
-    expect(sun.detail).toBe('Opens 5:00 PM');
+    expect(sun.detail).toBe('Opens tomorrow 5:00 PM');
+    expect(resolveDay(byId('carmichael'), '2026-09-07', calendar).hours).toEqual([r('5pm', '8pm', 'Dinner')]);
+    expect(computeStatus(byId('carmichael'), calendar, at('2026-09-07', '12:00')).state).toBe('closed');
+    expect(computeStatus(byId('carmichael'), calendar, at('2026-09-07', '17:00')).state).toBe('open');
+    expect(computeStatus(byId('carmichael'), calendar, at('2026-09-07', '20:00')).state).toBe('closed');
+    const tue = computeStatus(byId('carmichael'), calendar, at('2026-09-08', '07:00'));
+    expect(tue.state).toBe('open');
+    expect(tue.today).toBe('7:00 AM – 8:00 PM');
+    expect(tue.isSpecial).toBe(false);
+  });
+
+  it('keeps Commons Sep 6–7 source conflicts unknown even with live closure or service hours', () => {
+    const loc = byId('commons');
+    for (const date of ['2026-09-06', '2026-09-07']) {
+      for (const hours of [undefined, 'closed' as const, [r('11am', '7pm')]]) {
+        const live = hours === undefined ? undefined : { commons: [{ from: date, hours, note: 'Live menu' }] };
+        const st = computeStatus(loc, calendar, at(date, '12:00'), live);
+        expect(st.state).toBe('unknown');
+        expect(st.detail).toContain('Official sources disagree');
+        expect(st.detail).toContain('11 AM–7 PM');
+        expect(st.detail).toContain('closed until Sep 8');
+        expect(st.today).toBe('Hours not published');
+      }
+    }
+    expect(computeStatus(loc, calendar, at('2026-09-05', '12:00')).state).toBe('closed');
+    expect(computeStatus(loc, calendar, at('2026-09-08', '12:00')).state).toBe('open');
+    expect(computeStatus(loc, calendar, at('2026-09-08', '12:00'), {
+      commons: [{ from: '2026-09-08', hours: 'closed', note: 'New closure' }],
+    }).state).toBe('closed');
+  });
+
+  it('matches Connected departure entries and running windows throughout the week', () => {
+    const loc = byId('smfa-connected');
+    for (let d = 0; d < 7; d++) {
+      const date = addDays('2026-09-13', d);
+      const timetable = loc.transit!.departures![d]!;
+      const weekend = d === 0 || d === 6;
+      const last = weekend ? '22:00' : d === 5 ? '23:05' : '24:05';
+      const hours = resolveDay(loc, date, calendar).hours;
+      expect(hours).toEqual([r(weekend ? '11:00' : '7:25', last, weekend ? 'Every 2 hours' : 'Hourly')]);
+      expect(timetable.SMFA!.at(-1)).toBe(t(last));
+      expect(timetable['Medford (Granoff)']!.at(-1)).toBe(t(weekend ? '21:00' : d === 5 ? '22:00' : '23:00'));
+      if (weekend) {
+        expect(timetable.SMFA).toEqual(['12:00', '14:00', '16:00', '18:00', '20:00', '22:00'].map(t));
+        expect(timetable['Medford (Granoff)']).toEqual(['11:00', '13:00', '15:00', '17:00', '19:00', '21:00'].map(t));
+      } else {
+        expect(timetable['Medford (Granoff)']!.slice(0, 3)).toEqual(['7:25', '7:30', '9:00'].map(t));
+        expect(timetable.SMFA!.slice(0, 2)).toEqual(['8:15', '9:05'].map(t));
+        // The linked table does not publish a Mon–Thu 11:05 PM trip; do not interpolate one.
+        expect(timetable.SMFA!.includes(t('23:05'))).toBe(d === 5);
+      }
+    }
+    const fri = computeStatus(loc, calendar, at('2026-09-11', '22:30'));
+    expect(fri.state).toBe('running');
+    expect(fri.detail).toContain('Runs until 11:05 PM');
+    expect(fri.nextDepartures).toEqual([{ stop: 'SMFA', time: '11:05 PM', inMinutes: 35 }]);
+    expect(computeStatus(loc, calendar, at('2026-09-11', '23:06')).state).toBe('not_running');
+    expect(computeStatus(loc, calendar, at('2026-09-12', '22:01')).state).toBe('not_running');
+    const overnight = computeStatus(loc, calendar, at('2026-09-15', '00:01'));
+    expect(overnight.state).toBe('running');
+    expect(overnight.nextDepartures).toContainEqual({ stop: 'SMFA', time: '12:05 AM', inMinutes: 4 });
+  });
+
+  it('shows Beacon as an approximate loop without fixed departure predictions', () => {
+    const loc = byId('smfa-beacon-direct');
+    expect(loc.transit?.frequency).toBe('Continuous loop · about every 10 min');
+    expect(loc.transit?.departures).toBeUndefined();
+    for (let d = 0; d < 5; d++) {
+      const date = addDays('2026-09-14', d);
+      for (const time of ['08:00', '17:00']) {
+        const st = computeStatus(loc, calendar, at(date, time));
+        expect(st.state).toBe('running');
+        expect(st.period).toContain('about every 10 min');
+        expect(st.nextDepartures).toBeUndefined();
+      }
+      expect(computeStatus(loc, calendar, at(date, '12:00')).state).toBe('not_running');
+    }
+  });
+
+  it('publishes only Campus Center departures for Davis on every day', () => {
+    for (const stops of Object.values(byId('davis-shuttle').transit!.departures!)) {
+      if (!stops) throw new Error('Missing Davis departures');
+      expect(Object.keys(stops)).toEqual(['Campus Center']);
+      expect(stops['Campus Center']!.every((time) => time % 30 === 0)).toBe(true);
+    }
+  });
+
+  it('uses the freshly verified Fall 2026 Let’s Talk schedule, not the indexed Fall 2025 page', () => {
+    const loc = byId('lets-talk');
+    expect(loc.verified).toBe('2026-09-06');
+    expect(loc.note).toContain('Fall 2026');
+    expect(loc.building).toContain('TP3');
+    expect(computeStatus(loc, calendar, at('2026-09-03', '13:00')).state).toBe('closed');
+    for (const date of ['2026-09-10', '2026-12-10']) {
+      expect(computeStatus(loc, calendar, at(date, '13:00')).state).toBe('open');
+      expect(computeStatus(loc, calendar, at(date, '14:00')).state).toBe('closed');
+    }
+    expect(computeStatus(loc, calendar, at('2026-12-17', '13:00')).state).toBe('closed');
+    expect(computeStatus(loc, calendar, at('2027-01-21', '13:00')).state).toBe('unknown');
   });
   it('reflects published Pax et Lox holiday closures and the Sunday after Thanksgiving', () => {
     const pax = computeStatus(byId('pax-et-lox'), calendar, at('2026-09-21', '12:00'));

@@ -78,8 +78,9 @@ export const health: Location[] = [
     links: {
       source: 'https://students.tufts.edu/counseling-and-mental-health-service/services/lets-talk',
     },
+    note: 'The current official page explicitly lists Fall 2026: Thursdays 1–2 PM, Sep 10–Dec 10, at Tisch Sports & Fitness Center, TP3 conference room.',
     afterHours: CMHS_AFTER_HOURS,
-    verified: '2026-09-03',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {

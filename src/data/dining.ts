@@ -115,12 +115,11 @@ export const dining: Location[] = [
       { period: 'summer-2027', hours: 'unknown', note: 'Summer hours not published yet' },
     ],
     overrides: [
-      { from: '2026-09-03', to: '2026-09-05', hours: 'closed', note: 'Closed due to a building issue; reopens for dinner Sun Sep 6 (per dining.tufts.edu)' },
-      { from: '2026-09-06', hours: [r('5pm', '8pm', 'Dinner')], note: 'Dinner only: reopening after the building closure (per dining.tufts.edu)' },
-      { from: '2026-09-07', to: '2026-09-11', hours: hallDay('7am', '8pm'), note: 'Orientation / Labor Day hours' },
+      { from: '2026-09-03', to: '2026-09-06', hours: 'closed', note: 'Closed due to a building issue; reopens Mon Sep 7, 5–8 PM (Tufts Dining homepage update)' },
+      { from: '2026-09-07', hours: [r('5pm', '8pm', 'Dinner')], note: 'Dinner only, 5–8 PM; regular fall hours resume Sep 8 (Tufts Dining homepage update supersedes orientation hours)' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/carmichael-dining-hall', schedule: PREO_SRC },
-    verified: '2026-09-05',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {
@@ -147,10 +146,11 @@ export const dining: Location[] = [
       { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer' },
     ],
     overrides: [
-      { from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Closed until Tue Sep 8 per the dining menu system (the orientation hours table lists 11 AM – 7 PM on Sep 6–7)' },
+      { from: '2026-09-01', to: '2026-09-05', hours: 'closed', note: 'Closed per the Tufts Dining menu system' },
+      { from: '2026-09-06', to: '2026-09-07', hours: 'unknown', sourceConflict: true, note: 'Official sources disagree: orientation hours list 11 AM–7 PM; Nutrislice says Commons is closed until Sep 8. Confirm with Tufts Dining.' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/commons-marketplace', schedule: PREO_SRC },
-    verified: '2026-09-03',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {

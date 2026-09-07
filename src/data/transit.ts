@@ -30,7 +30,6 @@ const holidayUnknown: DateOverride[] = [
 const DIRECT = 'Direct · every 30 min';
 const LOOP = 'All Stops loop · every 30 min';
 const davisWeekdayCC = [...every('7:00', '18:30', 30)];
-const davisWeekdayDavis = [...every('7:15', '18:45', 30)];
 
 export const transit: Location[] = [
   {
@@ -39,7 +38,7 @@ export const transit: Location[] = [
     category: 'transit',
     building: 'Campus Center stop, 44 Professors Row ↔ Davis Square (4 College Ave)',
     description:
-      'Weekdays 7 AM – 7 PM the Direct shuttle runs Campus Center ↔ Davis Square. Evenings and weekends the All Stops loop adds Carmichael Hall and Olin Hall. The shuttle does not wait to depart.',
+      'Weekdays 7 AM – 7 PM the Direct shuttle runs Campus Center ↔ Davis Square. Evenings and weekends the All Stops loop adds Carmichael Hall and Olin Hall. Campus Center departures are at :00/:30; Davis departures depend on boarding and have no fixed time.',
     hours: [
       [r('10am', '11pm', LOOP)], // Sun
       [r('7am', '7pm', DIRECT), r('7pm', '11pm', LOOP)],
@@ -60,18 +59,18 @@ export const transit: Location[] = [
       frequency: 'Every 30 min',
       stops: ['Campus Center', 'Davis Square', 'Carmichael Hall (evenings/weekends)', 'Olin Hall (evenings/weekends)'],
       departures: {
-        0: { 'Campus Center': every('10:00', '22:30', 30), 'Davis Square': every('10:10', '22:40', 30) },
-        1: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)], 'Davis Square': [...davisWeekdayDavis, ...every('19:10', '22:40', 30)] },
-        2: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)], 'Davis Square': [...davisWeekdayDavis, ...every('19:10', '22:40', 30)] },
-        3: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)], 'Davis Square': [...davisWeekdayDavis, ...every('19:10', '22:40', 30)] },
-        4: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '23:30', 30)], 'Davis Square': [...davisWeekdayDavis, ...every('19:10', '23:40', 30)] },
-        5: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '25:30', 30)], 'Davis Square': [...davisWeekdayDavis, ...every('19:10', '25:40', 30)] },
-        6: { 'Campus Center': every('10:00', '22:30', 30), 'Davis Square': every('10:10', '22:40', 30) },
+        0: { 'Campus Center': every('10:00', '22:30', 30) },
+        1: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)] },
+        2: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)] },
+        3: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '22:30', 30)] },
+        4: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '23:30', 30)] },
+        5: { 'Campus Center': [...davisWeekdayCC, ...every('19:00', '25:30', 30)] },
+        6: { 'Campus Center': every('10:00', '22:30', 30) },
       },
     },
     links: { source: 'https://access.tufts.edu/davis-square-shuttle', tracker: TRACKER, schedule: ADVISORIES },
     note: 'Service may be suspended during university closures, holidays, or snow emergencies.',
-    verified: '2026-09-03',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {
@@ -80,15 +79,15 @@ export const transit: Location[] = [
     category: 'transit',
     building: 'Granoff Music Center (Talbot Ave) ↔ Tisch Gym ↔ NEC ↔ SMFA (230 The Fenway)',
     description:
-      'Medford ↔ Boston shuttle, about 50 minutes each way. Departs Medford on the hour and SMFA at :05 past. After 7 PM on weekdays it also serves Beacon St.',
+      'Medford ↔ Boston shuttle, about 50 minutes each way. Most weekday trips leave Medford on the hour and SMFA at :05 past; early and late trips differ. After 7 PM on weekdays it also serves Beacon St.',
     hours: [
-      [r('11am', '10:05pm', 'Every 2 hours')], // Sun
+      [r('11am', '10pm', 'Every 2 hours')], // Sun
       [r('7:25am', '12:05am', 'Hourly')],
       [r('7:25am', '12:05am', 'Hourly')],
       [r('7:25am', '12:05am', 'Hourly')],
       [r('7:25am', '12:05am', 'Hourly')],
-      [r('7:25am', '10:05pm', 'Hourly')], // Fri
-      [r('11am', '10:05pm', 'Every 2 hours')], // Sat
+      [r('7:25am', '11:05pm', 'Hourly')], // Fri
+      [r('11am', '10pm', 'Every 2 hours')], // Sat
     ],
     holidays: 'regular',
     breaks: 'unknown',
@@ -103,17 +102,17 @@ export const transit: Location[] = [
       stops: ['Granoff Music Center', 'Tisch Gym', 'NEC', 'SMFA', 'Beacon St (after 7 PM weekdays)'],
       departures: {
         0: { 'Medford (Granoff)': every('11:00', '21:00', 120), SMFA: every('12:00', '22:00', 120) },
-        1: { 'Medford (Granoff)': [t('7:25'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
-        2: { 'Medford (Granoff)': [t('7:25'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
-        3: { 'Medford (Granoff)': [t('7:25'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
-        4: { 'Medford (Granoff)': [t('7:25'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
-        5: { 'Medford (Granoff)': [t('7:25'), ...every('9:00', '22:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60)] },
+        1: { 'Medford (Granoff)': [t('7:25'), t('7:30'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
+        2: { 'Medford (Granoff)': [t('7:25'), t('7:30'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
+        3: { 'Medford (Granoff)': [t('7:25'), t('7:30'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
+        4: { 'Medford (Granoff)': [t('7:25'), t('7:30'), ...every('9:00', '23:00', 60)], SMFA: [t('8:15'), ...every('9:05', '22:05', 60), t('24:05')] },
+        5: { 'Medford (Granoff)': [t('7:25'), t('7:30'), ...every('9:00', '22:00', 60)], SMFA: [t('8:15'), ...every('9:05', '23:05', 60)] },
         6: { 'Medford (Granoff)': every('11:00', '21:00', 120), SMFA: every('12:00', '22:00', 120) },
       },
     },
     links: { source: 'https://access.tufts.edu/smfa-shuttle', tracker: TRACKER, schedule: 'https://go.tufts.edu/smfa_shuttle_schedule' },
-    note: 'The printed schedule also lists an early 7:30 AM Medford trip on weekdays. Friday’s last SMFA departure is listed as 10:05 PM on the PDF and 11:05 PM on the web page.',
-    verified: '2026-09-03',
+    note: 'Departure times are estimates from the linked timetable. The current web page specifies Friday’s final SMFA departure at 11:05 PM, superseding the 2025–26 PDF’s 10:05 PM cutoff. The PDF lists no 11:05 PM SMFA trip Mon–Thu; check the tracker for late trips.',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {
@@ -121,14 +120,14 @@ export const transit: Location[] = [
     name: 'SMFA Beacon Direct',
     category: 'transit',
     building: 'Beacon St (Tatte, 1003 Beacon St, Brookline) ↔ SMFA (230 The Fenway)',
-    description: 'Weekday commuter shuttle between the Beacon St residence and SMFA, every 20 minutes during the morning and evening windows. Fall and spring semesters only.',
+    description: 'Weekday commuter shuttle between the Beacon St residence and SMFA, running a continuous loop approximately every 10 minutes during the morning and evening windows. Fall and spring semesters only.',
     hours: [
       [],
-      [r('7:30am', '11:30am', 'Morning · every 20 min'), r('4pm', '8pm', 'Evening · every 20 min')],
-      [r('7:30am', '11:30am', 'Morning · every 20 min'), r('4pm', '8pm', 'Evening · every 20 min')],
-      [r('7:30am', '11:30am', 'Morning · every 20 min'), r('4pm', '8pm', 'Evening · every 20 min')],
-      [r('7:30am', '11:30am', 'Morning · every 20 min'), r('4pm', '8pm', 'Evening · every 20 min')],
-      [r('7:30am', '11:30am', 'Morning · every 20 min'), r('4pm', '8pm', 'Evening · every 20 min')],
+      [r('7:30am', '11:30am', 'Morning · about every 10 min'), r('4pm', '8pm', 'Evening · about every 10 min')],
+      [r('7:30am', '11:30am', 'Morning · about every 10 min'), r('4pm', '8pm', 'Evening · about every 10 min')],
+      [r('7:30am', '11:30am', 'Morning · about every 10 min'), r('4pm', '8pm', 'Evening · about every 10 min')],
+      [r('7:30am', '11:30am', 'Morning · about every 10 min'), r('4pm', '8pm', 'Evening · about every 10 min')],
+      [r('7:30am', '11:30am', 'Morning · about every 10 min'), r('4pm', '8pm', 'Evening · about every 10 min')],
       [],
     ],
     holidays: 'closed',
@@ -142,21 +141,12 @@ export const transit: Location[] = [
       ...holidayUnknown,
     ],
     transit: {
-      frequency: 'Every 20 min',
+      frequency: 'Continuous loop · about every 10 min',
       stops: ['Beacon St', 'SMFA'],
-      departures: Object.fromEntries(
-        [1, 2, 3, 4, 5].map((d) => [
-          d,
-          {
-            'Beacon St': [...every('7:30', '11:10', 20), ...every('16:10', '19:50', 20)],
-            SMFA: [...every('7:40', '11:20', 20), ...every('16:00', '19:40', 20)],
-          },
-        ]),
-      ),
     },
     links: { source: 'https://access.tufts.edu/smfa-shuttle', tracker: TRACKER, schedule: 'https://go.tufts.edu/smfa_shuttle_schedule' },
-    note: 'The 11:30 AM Beacon St trip is drop-off only.',
-    verified: '2026-09-03',
+    note: 'Use the live tracker for arrivals; the current web page’s continuous loop replaces the older PDF’s 20-minute departure estimates.',
+    verified: '2026-09-06',
     confidence: 'high',
   },
   {

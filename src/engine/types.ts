@@ -32,6 +32,8 @@ export type HoursSpec = WeekHours | 'closed' | 'unknown';
 
 /** Hours for a specific date or date range, e.g. Labor Day or first week of classes. */
 export interface DateOverride {
+  /** Static source conflict for these dates; keep unknown even when a live feed supplies hours. */
+  sourceConflict?: boolean;
   /** Higher values win within static or live overrides. Equal-priority overlaps are invalid. */
   priority?: number;
   confidence?: 'high' | 'medium' | 'low';
