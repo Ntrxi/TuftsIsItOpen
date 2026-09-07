@@ -41,7 +41,11 @@ export interface DateOverride {
   from: string;
   /** YYYY-MM-DD, inclusive. Defaults to `from`. */
   to?: string;
-  /** Omit to keep whatever hours would otherwise apply and only attach the note (e.g. a dining notice). */
+  /**
+   * Omit for a note only. Ranges describe service starting on this date and
+   * preserve earlier overnight service. 'closed', an empty DayHours array, and
+   * 'unknown' block incoming service at midnight; weekly hours use service dates.
+   */
   hours?: DayHours | WeekHours | 'closed' | 'unknown' | 'regular';
   note: string;
 }
@@ -163,18 +167,24 @@ export interface Status {
   period?: string;
   /** When the current sub-period ends, if before the overall close. */
   periodEnds?: string;
-  /** Today's hours as text. */
+  /** Hours starting on today's campus service date. Active carryover is explained in scheduleNote. */
   today: string;
   /** Today's individual periods when a day has labeled/split hours. */
   todayPeriods: string[];
   /** Note explaining why hours differ today (holiday/break/override). */
   scheduleNote?: string;
-  /** True when today's hours come from an override/holiday/break rather than the regular week. */
+  /** True for override/holiday/break hours or when a next-day exception truncates today's service. */
   isSpecial: boolean;
-  /** Week overview (regular hours in effect for the current schedule). */
+  /** Service-day overview starting today, preserving overnight ends; first row matches `today`. */
   week: HoursLine[];
   /** Transit: next departures per stop. */
   nextDepartures?: { stop: string; time: string; inMinutes: number }[];
-  /** Minutes until the current state changes (for countdowns). */
+  /** Next state, access, or period-label change, including soon thresholds. UTC ISO string. */
+  nextTransitionAt?: string;
+  /** Next access-mode change within the current continuous service span. UTC ISO string. */
+  accessChangesAt?: string;
+  /** Confirmed end of current continuous service. Omitted at uncertainty/lookahead limits. UTC ISO string. */
+  closesAt?: string;
+  /** Rounded-up elapsed minutes until nextTransitionAt, NOT necessarily until opening/closing. */
   changesInMinutes?: number;
 }

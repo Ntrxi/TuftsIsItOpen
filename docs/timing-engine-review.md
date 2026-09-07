@@ -3,7 +3,7 @@
 Review date: 2026-09-07  
 Scope: schedule resolution, local-time conversion, live-feed interpretation, status calculation, client refresh behavior, and related architecture.
 
-This document records the issues found during the timing-engine review. It is a review record, not a list of completed fixes. No production code was changed as part of the review.
+This document records the issues found during the timing-engine review. No production code was changed as part of the original review. The PR 1 implementation record at the end documents subsequent fixes; the other findings remain separate work.
 
 ## Correctness issues
 
@@ -176,3 +176,62 @@ PR 1 needs an additional design checkpoint before implementation:
 > First propose the interval ownership and DST policy using concrete examples: an overnight interval crossing a closure, a midnight-continuous interval, spring-forward 2:30 AM, and fall-back repeated 1:30 AM. Do not implement until the policy is represented in tests.
 
 Provider caching and broader performance work should remain separate until request-volume or latency evidence justifies it. The current engine benchmark was about 1.4 ms for all 37 locations, so caching is an architectural improvement rather than an urgent correctness fix.
+
+## PR 1 implementation record (2026-09-07)
+
+Implemented timeline correctness for findings 1, 3, and 4, plus the transition contract needed by PR 4. The resolved timeline is internal to `src/engine/status.ts`; timezone conversion and status contracts live in `time.ts` and `types.ts`. Provider parsing, rendering/client code, timetable boundary rules, and persistent caching are unchanged.
+
+### Ownership and uncertainty
+
+`resolveDay()` now returns `allowsCarryover` independently of `source`. Known regular schedules (including empty weekdays), replacement ranges, weekly/seasonal schedules, explicit `regular` overrides/periods, and note-only notices preserve published incoming overnight service. Explicit date closures (including empty single-date arrays), observed holidays, unknown coverage, and source conflicts stop carryover at midnight. A seasonal `closed` period means no new service starts; the final prior service is allowed to finish.
+
+This policy was revised after production-shaped review cases exposed that treating every replacement date as a midnight barrier cut consecutive Commons events and LibCal's per-date Tisch schedules short. The user selected preservation of published service tails across schedule changes. A genuine next-day cutoff now adds an explanatory note to the preceding day's card and sets `isSpecial`; ordinary schedule changes do neither. Existing override priority and confidence rules remain in place.
+
+An interval starting Monday at 9 PM and normally ending Tuesday at 4 AM is truncated at midnight if Tuesday owns its date. A Tuesday closure confirms a midnight close; Tuesday unknown ends only the known availability span. For public access at Monday 11:50 PM with Tuesday unknown:
+
+```text
+state: open
+detail: Hours not published from tomorrow at 12:00 AM
+closesAt: undefined
+changesInMinutes: 10
+nextTransitionAt: Tuesday midnight as a UTC ISO string
+```
+
+The facility becomes unknown at midnight and never enters closing-soon merely because published knowledge ends. Special access and transit keep their respective states until that boundary. A replacement Tuesday schedule of 10 AM–6 PM preserves Monday's service until 4 AM, followed by a gap until 10 AM. The final Davis Friday loop likewise finishes at 2 AM on the first Saturday of its summer suspension.
+
+Touching intervals merge on an absolute timeline: service through midnight followed by midnight–4 AM closes at 4 AM. A finite lookahead never creates a closing timestamp or a fabricated midnight-close detail. A partial first day followed by continuous service beyond the horizon says `No closing time in the next 60 days`.
+
+### Service-day display and PR 4 interface
+
+The user selected service-start-day display after reviewing the initial midnight-sliced presentation. Today, today's labeled periods, and week rows retain complete overnight ranges: SafeRide is `11:00 PM – 7:00 AM`; Tisch is `7:45 AM – 4:00 AM`. While a previous service is active, a schedule note says `Overnight service from yesterday until 4:00 AM`. If no service starts today, the Today row says `No service starts today` during that carryover, avoiding a contradictory `Closed` row. Labeled periods are not duplicated by midnight slicing. Actual dated closures still clip the affected overnight range, with an explanatory note.
+
+Confirmed closes on later dates include a qualifier, such as `Closes tomorrow at 4:00 AM` or `Closes Wed, Sep 16 at 5:00 PM`; known distant closes are not hidden behind generic 24-hour text.
+
+All new timestamps are optional UTC ISO strings:
+
+| Field | Contract |
+|---|---|
+| `nextTransitionAt` | Earliest strictly future state, access-mode, or period-label change, including applicable opening/closing-soon thresholds and transitions into/out of unknown coverage |
+| `accessChangesAt` | Next access-mode change inside the current continuous service span |
+| `closesAt` | Confirmed end of the current continuous service span; absent at unknown coverage or the artificial horizon |
+| `changesInMinutes` | Rounded-up elapsed minutes until `nextTransitionAt`; absent when no transition is known |
+
+Primary opening/closing details still count down to the actual service boundary. Consumers must not interpret `changesInMinutes` as time until opening or closing. The existing live Tisch test intentionally changes from 1380 to 405 minutes at 1 AM, targeting public access at 7:45 AM. A facility opening in 200 minutes reports 170 until it enters opening-soon. PR 4 can use the exact timestamps without changing this definition.
+
+### DST and transit compatibility
+
+`localToDate()` keeps its signature. It normalizes calendar minutes, shifts nonexistent spring times forward by the gap (2:30 AM becomes 3:30 AM), and selects the first repeated fall occurrence. Membership and status countdowns use actual instants, including the second repeated hour. Invalid or collapsed/reversed intervals are individually omitted with a neutral warning, preserving other valid periods rather than declaring the whole day unknown or attributing malformed data to DST. SafeRide countdowns at spring 1:30 AM and the two fall 1:30 AM occurrences are respectively 270, 390, and 330 elapsed minutes.
+
+Departure provenance is evaluated independently for each service date: today's regular source permits today's timetable; yesterday's regular source and today's carryover permission permit yesterday's timetable. A new seasonal schedule therefore cannot erase yesterday's published trips. An explicit `regular` override still suppresses timetable predictions for its own service date, but not another date. Trips beyond a dated closure/unknown midnight are suppressed. Inclusive final-departure selection and departure countdown arithmetic remain for PR 3.
+
+### Validation and implementation review
+
+Policy regressions were run before production edits: 17 of the initial 19 tests failed against the old engine. All eight initial review regressions also failed before these follow-up fixes. Tests now cover real Commons/Tisch/Davis cases, exception ownership, unknown/confirmed boundaries, continuity, DST, transition thresholds, service-day text/carryover notes, departure eligibility, and independent absolute coverage invariants. Shared membership/threshold helpers and boundary tests keep transition timestamps aligned with displayed state and period changes.
+
+The already-declared jsdom 30.0.1 dependency was restored in place with lifecycle scripts disabled; manifests and the lockfile were unchanged. Independent review found and prompted the lookahead-detail regression above. Follow-up review found zero differences across 38,355 fast/cached versus reference timezone conversions and 1,000 adaptive versus full-window/shared versus individual status calculations, including DST dates and synthetic overrides.
+
+The timeline first resolves the seven-day overview plus the next date needed to check its overnight ends, extending to the existing 60-day limit only when necessary. `computeAll()` shares timezone offsets, converted instants, local projections, and calendar windows across locations for that invocation only. Ordinary dates use direct arithmetic after their offsets are checked; DST dates use the deterministic fallback. No location schedule or live snapshot is cached between invocations. Unused interval source metadata, the unused next-opening argument, and the unused week-overview wrapper were removed.
+
+Run `node test/benchmark-timing.mjs` to reproduce engine-only measurements. After these fixes, local 100-sample medians for all 37 locations were 3.82 ms on Sep 14 and 5.83 ms on Jan 10 (p95 4.75/6.73 ms), versus the prior implementation's tens of milliseconds. Spring/fall DST medians were 3.40/3.45 ms. These are local wall-clock measurements, not production Worker CPU or end-to-end request guarantees. Persistent/provider caching remains separate.
+
+Follow-up final checks: all 203 tests across 12 files passed, including browser tests; both TypeScript configurations, the production build, and whitespace checks passed. The new timing regression tests and benchmark are staged for inclusion in a later commit. No commit, deployment, or merge was performed.
