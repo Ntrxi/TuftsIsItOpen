@@ -287,17 +287,20 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
     const minutesToEnd = span.end - m;
     const period = raw.find((i) => (i.label || i.access) && i.start <= m && m < i.end);
     const reopens = spans.find((s) => s.start >= span.end);
+    const tomorrow = span.start <= 0 && span.end === 1440
+      ? resolveDay(loc, addDays(now.key, 1), cal, live).hours : undefined;
+    const continuous = Array.isArray(tomorrow) && mergeContiguous(tomorrow).some((s) => s.start === 0 && s.end >= 1440);
 
     let state: State;
     if (period?.access === 'unknown') state = 'unknown';
     else if (isTransit) state = 'running';
     else if ((period?.access ?? loc.access) === 'appointment') state = 'appointment';
     else if ((period?.access ?? loc.access) === 'special') state = 'special';
-    else state = minutesToEnd <= closingSoon ? 'closing_soon' : 'open';
+    else state = !continuous && minutesToEnd <= closingSoon ? 'closing_soon' : 'open';
 
     const endTime = fmtTime(span.end);
     const verb = isTransit ? 'Runs until' : 'Closes';
-    let detail = minutesToEnd <= 90 ? `${verb} ${endTime} (in ${fmtMinutesUntil(minutesToEnd)})` : `${verb} ${endTime}`;
+    let detail = continuous ? 'Available 24 hours' : minutesToEnd <= 90 ? `${verb} ${endTime} (in ${fmtMinutesUntil(minutesToEnd)})` : `${verb} ${endTime}`;
     if (reopens) detail += `, back ${fmtTime(reopens.start)}`;
     if (state === 'unknown') detail = 'Access hours unconfirmed; check the official page';
 
@@ -311,7 +314,7 @@ export function computeStatus(loc: Location, cal: Calendar, at: Date, liveOverri
       today: todayText,
       todayPeriods,
       nextDepartures: departures,
-      changesInMinutes: minutesToEnd,
+      changesInMinutes: continuous ? undefined : minutesToEnd,
     };
   }
 

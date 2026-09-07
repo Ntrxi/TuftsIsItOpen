@@ -28,6 +28,7 @@ export const mail: Location[] = [
     holidays: 'closed',
     breaks: 'regular',
     overrides: [
+      { from: '2026-08-28', hours: [r('8am', '5pm')], note: 'Move-in extended hours' },
       { from: '2026-09-02', hours: [r('8am', '5pm')], note: 'Move-in extended hours' },
       { from: '2026-09-06', hours: [r('10am', '4pm')], note: 'Move-in weekend hours' },
       { from: '2026-09-07', hours: [r('10am', '5pm')], note: 'Open Labor Day (move-in hours)' },
@@ -40,7 +41,7 @@ export const mail: Location[] = [
       schedule: 'https://access.tufts.edu/studentmail-fall',
     },
     note: 'Break hours follow the regular weekday schedule; closed on university holidays.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -49,10 +50,11 @@ export const mail: Location[] = [
     category: 'mail',
     building: '46 Professors Row',
     description: 'Tufts University Official Bookstore, run by Barnes & Noble College. Textbooks, supplies, and Tufts gear.',
-    hours: [[], [r('9am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], []],
+    hours: [[r('10am', '4pm')], [r('10am', '5pm')], [r('9am', '5pm')], [r('8am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], [r('12pm', '4pm')]],
     holidays: 'closed',
     breaks: 'regular',
     overrides: [
+      { from: '2026-09-07', hours: 'unknown', note: 'The bookstore lists Monday 10 AM–5 PM without calendar dates; Labor Day applicability is unconfirmed.' },
       {
         from: '2026-08-31',
         to: '2026-09-06',
@@ -63,8 +65,8 @@ export const mail: Location[] = [
     links: {
       source: 'https://tufts.bncollege.com/',
     },
-    note: 'The store posts week-specific hours; confirm on the store site before a special trip.',
-    verified: '2026-09-03',
+    note: 'The current store page lists weekday/weekend hours without effective dates. This pattern is not verified as a semester schedule; confirm before a special trip.',
+    verified: '2026-09-07',
     confidence: 'medium',
   },
   {
@@ -89,7 +91,7 @@ export const mail: Location[] = [
       source: 'https://tools.usps.com/locations/details/1434341',
     },
     note: 'Closed 1–2 PM for lunch. Follows the federal holiday calendar, not the Tufts one.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
 ];

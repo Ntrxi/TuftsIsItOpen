@@ -32,7 +32,7 @@ describe('live snapshot cache and health', () => {
     const second = await request('/api/live');
     const data = await second.json() as LiveData;
     expect(data.sources).toEqual({ library: 'error', dining: 'error', shuttles: 'error' });
-    expect(data.overrides.carmichael?.[0]?.hours).toBe('unknown');
+    expect(data.overrides.carmichael?.[0]?.hours).toBeUndefined();
     expect(data.vehicles).toEqual({});
     expect((await request('/healthz')).status).toBe(503);
     expect(console.warn).toHaveBeenCalled();

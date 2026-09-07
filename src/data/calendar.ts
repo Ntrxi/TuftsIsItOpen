@@ -5,7 +5,10 @@ import type { Calendar } from '../engine/types';
  * Sources:
  *  - https://students.tufts.edu/registrar/courses-and-calendars/academic-calendar
  *  - https://access.tufts.edu/university-holiday-bonus-and-winter-break-days-calendar
- * Dates are inclusive. Verified 2026-09-03.
+ *  - https://www.trumba.com/calendars/student-life-registrar-academic-calendar.json
+ *  - https://students.tufts.edu/family-engagement/about/important-dates
+ * Dates are inclusive. Academic dates and 2026 holidays verified 2026-09-07.
+ * 2027 observed holidays follow the university's published observance rule.
  */
 export const calendar: Calendar = {
   holidays: [
@@ -32,11 +35,11 @@ export const calendar: Calendar = {
     { id: 'orientation-2026', name: 'Orientation week', from: '2026-08-28', to: '2026-09-07', kind: 'info' },
     { id: 'fall-2026', name: 'Fall semester', from: '2026-09-08', to: '2026-12-23', kind: 'term' },
     { id: 'thanksgiving-2026', name: 'Thanksgiving recess', from: '2026-11-25', to: '2026-11-29', kind: 'break' },
-    { id: 'fall-exams-2026', name: 'Fall finals', from: '2026-12-15', to: '2026-12-23', kind: 'exams' },
+    { id: 'fall-exams-2026', name: 'Fall finals', from: '2026-12-16', to: '2026-12-23', kind: 'exams' },
     { id: 'winter-2026', name: 'Winter break', from: '2026-12-24', to: '2027-01-19', kind: 'break' },
     { id: 'spring-2027', name: 'Spring semester', from: '2027-01-20', to: '2027-05-14', kind: 'term' },
     { id: 'spring-break-2027', name: 'Spring break', from: '2027-03-20', to: '2027-03-28', kind: 'break' },
-    { id: 'spring-exams-2027', name: 'Spring finals', from: '2027-05-04', to: '2027-05-14', kind: 'exams' },
+    { id: 'spring-exams-2027', name: 'Spring finals', from: '2027-05-07', to: '2027-05-14', kind: 'exams' },
     { id: 'summer-2027', name: 'Summer', from: '2027-05-15', to: '2027-08-31', kind: 'summer' },
   ],
   through: '2027-08-31',

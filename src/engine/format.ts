@@ -25,6 +25,7 @@ export function fmtRange(i: Interval): string {
 export function fmtDay(day: DayHours | 'closed' | 'unknown'): string {
   if (day === 'unknown') return 'Hours not published';
   if (day === 'closed' || day.length === 0) return 'Closed';
+  if (day.length === 1 && day[0]!.start === 0 && day[0]!.end === 1440) return '24 hours';
   return mergeContiguous(day).map(fmtRange).join(', ');
 }
 

@@ -69,7 +69,8 @@ it('retains recent data through failures, expires by age, and recovers without A
   expect(signal?.aborted).toBe(true);
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
   await vi.advanceTimersByTimeAsync(9 * 60_000);
-  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('unknown');
+  expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('open');
+  expect(document.body.textContent).toContain('Live hours unavailable');
   vi.mocked(fetch).mockImplementation(async () => new Response(JSON.stringify({ ...data, fetchedAt: new Date().toISOString() })));
   await vi.advanceTimersByTimeAsync(120_000);
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');

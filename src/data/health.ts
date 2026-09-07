@@ -37,7 +37,7 @@ export const health: Location[] = [
     },
     note: 'Closed 12–1 PM daily and Thursday mornings.',
     afterHours: HEALTH_AFTER_HOURS,
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -57,7 +57,7 @@ export const health: Location[] = [
     },
     note: 'Closed 12–1 PM daily and Thursday mornings.',
     afterHours: CMHS_AFTER_HOURS,
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -80,7 +80,7 @@ export const health: Location[] = [
     },
     note: 'The current official page explicitly lists Fall 2026: Thursdays 1–2 PM, Sep 10–Dec 10, at Tisch Sports & Fitness Center, TP3 conference room.',
     afterHours: CMHS_AFTER_HOURS,
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -97,7 +97,7 @@ export const health: Location[] = [
       source: 'https://students.tufts.edu/care',
     },
     afterHours: 'After hours, call the Tufts 24/7 Help Line at 617-627-3400 to reach the Counselor on Call.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
 ];

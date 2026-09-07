@@ -135,6 +135,20 @@ async function libcalOverrides(todayKey: string): Promise<NutrisliceResult> {
           hours = hours.map(({ start, end, access }) => access ? { start, end, access, label: 'Tufts ID only' } : { start, end });
         }
         if (hours === undefined) continue;
+        // DDS staffed hours cannot establish access while the enclosing building is closed.
+        if (cfg.locId === 'tisch-dds' && Array.isArray(hours)) {
+          const buildingDay = readLocation(20832).get(date);
+          const buildingHours = buildingDay && libcalDayHours(buildingDay, false);
+          if (buildingHours !== undefined && hours.some((h) => buildingHours === 'closed' ||
+              !buildingHours.some((b) => b.start <= h.start && b.end >= h.end))) {
+            out[cfg.locId]!.push({ from: date, hours: 'unknown', note: 'Library calendars disagree: DDS desk hours extend beyond Tisch building hours. Confirm with the library.' });
+            continue;
+          }
+          if (buildingHours === undefined) {
+            out[cfg.locId]!.push({ from: date, hours: 'unknown', note: 'DDS desk hours are published, but Tisch building access is not yet confirmed.' });
+            continue;
+          }
+        }
         const baseline = resolveDay(locations.find((loc) => loc.id === cfg.locId)!, date, calendar).hours;
         if (baseline !== 'unknown' && sameHours(hours === 'closed' ? [] : hours, baseline)) continue;
         out[cfg.locId]!.push({ from: date, hours, note: 'Hours from the library calendar' });
@@ -335,7 +349,7 @@ async function passioVehicles(): Promise<Record<string, number>> {
 
 /* Assembly ---------------------------------------------------------------- */
 
-/** Failed hours feeds become unknown; old closures and openings are never carried forward as current. */
+/** Failed feeds fall back to static schedules; old live closures/openings are discarded. */
 export async function fetchAllLive(now: Date): Promise<LiveData> {
   const todayKey = toLocal(now).key;
   const [lib, nutri, passio] = await Promise.allSettled([libcalOverrides(todayKey), nutrisliceOverrides(todayKey), passioVehicles()]);

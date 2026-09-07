@@ -42,7 +42,7 @@ export function isLiveData(value: unknown): value is LiveData {
     }));
 }
 
-/** Expire by the original fetch time on both server and client. Failure never restores static hours. */
+/** Expire on server and client; discard failed live hours and annotate the static fallback. */
 export function usableLive(data: LiveData, at: Date, disconnected = false): LiveData {
   const age = at.getTime() - Date.parse(data.fetchedAt);
   const expired = !Number.isFinite(age) || age < -CLOCK_SKEW_TOLERANCE_MS || age >= HOURS_MAX_AGE_MS;
@@ -60,7 +60,7 @@ export function usableLive(data: LiveData, at: Date, disconnected = false): Live
   }
   const overrides = expired ? {} : { ...data.overrides };
   const key = toLocal(at).key;
-  for (const id of failed) overrides[id] = [{ from: addDays(key, -1), to: addDays(key, 60), hours: 'unknown', note: 'Live hours unavailable; check the official source' }];
+  for (const id of failed) overrides[id] = [{ from: addDays(key, -1), to: addDays(key, 60), note: 'Live hours unavailable; using the verified static schedule where available. Check the official source.' }];
   const vehiclesExpired = expired || age >= VEHICLES_MAX_AGE_MS || !['ok', 'stale'].includes(sources.shuttles ?? '');
   if (vehiclesExpired) sources.shuttles = 'error';
   return { ...data, overrides, sources, failedLocations: [...failed], vehicles: vehiclesExpired ? {} : data.vehicles };

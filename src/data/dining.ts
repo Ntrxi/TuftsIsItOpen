@@ -1,8 +1,23 @@
-import type { DayHours, Location, PeriodHours, WeekHours } from '../engine/types';
+import type { DateOverride, DayHours, Location, PeriodHours, WeekHours } from '../engine/types';
 import { r } from '../engine/format';
 
 const HOURS_SRC = 'https://dining.tufts.edu/hours/regular-hours-operation';
 const PREO_SRC = 'https://dining.tufts.edu/hours/pre-o-and-orientation-hours';
+
+// Specific published dates take precedence over the page's generic Fri/Sat heading.
+const lateNightDates = [
+  '09-25', '09-26', '10-02', '10-03', '10-16', '10-17', '10-23', '10-24',
+  '10-30', '10-31', '11-06', '11-07', '11-13', '11-14', '11-20', '11-24',
+  '12-04', '12-05', '12-11', '12-12',
+];
+const lateNightEvents: DateOverride[] = lateNightDates.map((date) => ({
+  from: `2026-${date}`, hours: [r('9pm', '12:30am', 'Late night')],
+  note: date === '11-24'
+    ? 'Tufts explicitly lists Tuesday Nov 24 despite its Friday/Saturday heading; confirm this unusual date with Dining.'
+    : 'Published Fall 2026 Late Night date',
+  confidence: date === '11-24' ? 'medium' : 'high',
+  sourceConflict: date === '11-24',
+}));
 
 /** Continuous-service dining hall day with Tufts meal periods (breakfast until 11, lunch 11–2, late lunch 2–5, dinner 5–close). */
 function hallDay(open: string, close: string, opts: { brunch?: boolean } = {}): DayHours {
@@ -90,13 +105,13 @@ export const dining: Location[] = [
       { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer (Carmichael is the summer dining hall)' },
     ],
     overrides: [
-      { from: '2026-09-03', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation hours' },
-      { from: '2026-09-04', hours: splitDay(['7am', '10am'], ['11am', '3pm'], null), note: 'Orientation hours · dinner closed for the First-Year Food Fair (Res Quad, 5–7 PM)' },
+      { from: '2026-09-03', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['4:30pm', '8pm']), note: 'Orientation table: Thursday dinner 4:30–8 PM' },
+      { from: '2026-09-04', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation table: Friday dinner 5–8 PM; dinner is not closed for the Food Fair' },
       { from: '2026-09-05', hours: splitDay(['7am', '10am'], ['11am', '3pm'], ['5pm', '8pm']), note: 'Orientation hours' },
       { from: '2026-09-06', to: '2026-09-07', hours: [r('7:30am', '11am', 'Breakfast'), r('11am', '2pm', 'Lunch'), r('2pm', '5pm', 'Late lunch'), r('5pm', '9pm', 'Dinner')], note: 'Orientation / Labor Day hours' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/dewick-dining', schedule: PREO_SRC },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -116,10 +131,10 @@ export const dining: Location[] = [
     ],
     overrides: [
       { from: '2026-09-03', to: '2026-09-06', hours: 'closed', note: 'Closed due to a building issue; reopens Mon Sep 7, 5–8 PM (Tufts Dining homepage update)' },
-      { from: '2026-09-07', hours: [r('5pm', '8pm', 'Dinner')], note: 'Dinner only, 5–8 PM; regular fall hours resume Sep 8 (Tufts Dining homepage update supersedes orientation hours)' },
+      { from: '2026-09-07', hours: [r('5pm', '8pm', 'Dinner')], note: 'Dinner only, 5–8 PM; regular fall hours resume Sep 8 (Dining homepage and corrected orientation table agree)' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/carmichael-dining-hall', schedule: PREO_SRC },
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -140,7 +155,7 @@ export const dining: Location[] = [
     holidays: 'regular',
     breaks: 'unknown',
     periods: [
-      { period: 'thanksgiving-2026', hours: [[r('5pm', '10pm')], [r('11am', '10pm')], [r('11am', '10pm')], [r('11am', '10pm')], [], [], []], note: THANKSGIVING_NOTE },
+      { period: 'thanksgiving-2026', confidence: 'low', hours: [[r('5pm', '10pm')], [r('11am', '10pm')], [r('11am', '10pm')], [r('11am', '10pm')], [], [], []], note: THANKSGIVING_NOTE },
       { period: 'winter-2026', hours: 'unknown', note: 'Winter break hours not published yet' },
       { period: 'spring-break-2027', hours: 'unknown', note: 'Spring break hours not published yet' },
       { period: 'summer-2027', hours: 'closed', note: 'Closed for the summer' },
@@ -150,7 +165,7 @@ export const dining: Location[] = [
       { from: '2026-09-06', to: '2026-09-07', hours: 'unknown', sourceConflict: true, note: 'Official sources disagree: orientation hours list 11 AM–7 PM; Nutrislice says Commons is closed until Sep 8. Confirm with Tufts Dining.' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/commons-marketplace', schedule: PREO_SRC },
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -158,19 +173,23 @@ export const dining: Location[] = [
     name: 'Commons Late Night',
     category: 'dining',
     building: 'Commons Marketplace, Mayer Campus Center',
-    description: 'Late-night menu on select Friday and Saturday nights. Order through the Transact Mobile Ordering app only. Meal swipe equivalency accepted.',
-    hours: [[], [], [], [], [], [r('9pm', '12:30am', 'Late night')], [r('9pm', '12:30am', 'Late night')]],
+    description: 'Late-night menu on published event dates, usually Fridays and Saturdays. Order through the Transact Mobile Ordering app only. Meal swipe equivalency accepted.',
+    hours: 'closed',
     holidays: 'regular',
     breaks: 'closed',
     overrides: [
+      ...lateNightEvents,
       { from: '2026-09-01', to: '2026-09-24', hours: 'closed', note: 'Fall Late Night starts Fri Sep 25' },
       { from: '2026-10-09', to: '2026-10-10', hours: 'closed', note: 'No Late Night this weekend' },
       { from: '2026-11-27', to: '2026-11-28', hours: 'closed', note: 'No Late Night over Thanksgiving' },
+      { from: '2026-11-21', to: '2026-11-22', hours: 'unknown', sourceConflict: true, note: 'The Friday/Saturday heading suggests Nov 21, but the date list says Nov 20 & 24. Confirm with Dining; Nov 21 and its overnight spill are unconfirmed.' },
+      { from: '2026-11-25', hours: 'unknown', sourceConflict: true, note: 'Overnight service from the disputed Nov 24 event is unconfirmed; contact Dining.' },
       { from: '2026-12-18', to: '2027-01-19', hours: 'closed', note: 'Fall Late Night ended Dec 12' },
       { from: '2027-01-20', to: '2027-05-14', hours: 'unknown', note: 'Spring Late Night dates not announced yet' },
     ],
     links: { source: 'https://dining.tufts.edu/hours/late-night-commons-hours', menu: 'https://tufts.nutrislice.com/menu/commons-marketplace' },
-    verified: '2026-09-03',
+    note: 'Only listed dates are scheduled. The Nov 21/24 discrepancy remains unconfirmed.',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -185,7 +204,7 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' }],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/hodgdon-food-on-the-run' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -204,7 +223,7 @@ export const dining: Location[] = [
       { from: '2026-09-10', hours: [r('8am', '6pm')], note: 'Open until 6 PM per the orientation-week hours table (regular Thursday close is 5 PM)' },
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/hotung-cafe', schedule: PREO_SRC },
-    verified: '2026-09-05',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -219,7 +238,7 @@ export const dining: Location[] = [
     overrides: [{ from: '2026-09-01', to: '2026-09-09', hours: 'unknown', note: 'First pub night of the semester not announced yet' }],
     links: { source: 'https://dining.tufts.edu/pub' },
     note: 'Pub nights are a series of events and do not run every Thursday. Check dining.tufts.edu/pub before going.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'medium',
   },
   {
@@ -234,7 +253,7 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' }],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/kindlevan-cafe' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -249,7 +268,7 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' }],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/mugar-cafe' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -268,7 +287,7 @@ export const dining: Location[] = [
     ],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/pax-et-lox-glatt-kosher-deli', schedule: 'https://dining.tufts.edu/hours/pax-et-lox-holiday-hours' },
     note: 'Closes for Jewish holidays: Rosh Hashanah (Fri Sep 11) and Yom Kippur (Mon Sep 21) this fall; no closures for Sukkot.',
-    verified: '2026-09-05',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -283,7 +302,7 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' }],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/tower-cafe' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -298,7 +317,7 @@ export const dining: Location[] = [
     periods: RETAIL_CLOSED_WEEK,
     overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'closed', note: 'Opens for the semester Tue Sep 8' }],
     links: { source: HOURS_SRC, menu: 'https://tufts.nutrislice.com/menu/smfa' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
 ];

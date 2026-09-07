@@ -70,7 +70,7 @@ export const transit: Location[] = [
     },
     links: { source: 'https://access.tufts.edu/davis-square-shuttle', tracker: TRACKER, schedule: ADVISORIES },
     note: 'Service may be suspended during university closures, holidays, or snow emergencies.',
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -112,7 +112,7 @@ export const transit: Location[] = [
     },
     links: { source: 'https://access.tufts.edu/smfa-shuttle', tracker: TRACKER, schedule: 'https://go.tufts.edu/smfa_shuttle_schedule' },
     note: 'Departure times are estimates from the linked timetable. The current web page specifies Friday’s final SMFA departure at 11:05 PM, superseding the 2025–26 PDF’s 10:05 PM cutoff. The PDF lists no 11:05 PM SMFA trip Mon–Thu; check the tracker for late trips.',
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -146,7 +146,7 @@ export const transit: Location[] = [
     },
     links: { source: 'https://access.tufts.edu/smfa-shuttle', tracker: TRACKER, schedule: 'https://go.tufts.edu/smfa_shuttle_schedule' },
     note: 'Use the live tracker for arrivals; the current web page’s continuous loop replaces the older PDF’s 20-minute departure estimates.',
-    verified: '2026-09-06',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -167,7 +167,7 @@ export const transit: Location[] = [
     },
     links: { source: 'https://access.tufts.edu/grocery-shuttle', tracker: TRACKER, schedule: ADVISORIES },
     note: 'Runs year-round, including winter and summer breaks.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -190,7 +190,7 @@ export const transit: Location[] = [
     breaks: 'regular',
     transit: { frequency: 'On request' },
     links: { source: 'https://access.tufts.edu/saferide-services' },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
 ];

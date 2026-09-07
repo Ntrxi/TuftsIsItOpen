@@ -29,7 +29,7 @@ export const tech: Location[] = [
     },
     sourceConflict: 'Official TTS sources disagree on walk-up hours; confirm with TTS at 617-627-3376.',
     note: 'The Aug 6, 2026 announcement lists Mon–Thu 9 AM–9 PM, Fri 9 AM–5 PM, Sat 10 AM–5 PM, Sun 10 AM–9 PM. The IT locations page instead lists Sun–Thu 9 AM–11 PM and Fri–Sat 9 AM–5 PM.',
-    verified: '2026-09-05',
+    verified: '2026-09-07',
     confidence: 'medium',
   },
   {
@@ -42,10 +42,9 @@ export const tech: Location[] = [
     hours: 'unknown',
     holidays: 'regular',
     breaks: 'unknown',
-    overrides: [{ from: '2026-09-01', to: '2026-09-07', hours: 'unknown', note: 'Fall hours begin with classes on Sep 8' }],
     links: { source: 'https://nolop.org/hours/' },
     note: 'The hours page still lists summer hours ending Aug 7. It mentions an 11 PM semester close except Saturday, but does not publish a complete fall schedule. Confirm with Nolop.',
-    verified: '2026-09-05',
+    verified: '2026-09-07',
     confidence: 'low',
   },
   {
@@ -62,7 +61,7 @@ export const tech: Location[] = [
       schedule: 'https://sites.tufts.edu/bray/appointment-request-information/',
     },
     note: 'Fall 2026 open-shop hours are not posted yet (summer was Mon–Fri 10 AM – 5 PM). Open hours and heat closures are posted on the Bray Lab calendar.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'low',
   },
   {
@@ -71,13 +70,20 @@ export const tech: Location[] = [
     category: 'tech',
     building: 'Bray Laboratory room 102, 504 Boston Ave',
     description:
-      'Stratasys F120, Markforged Onyx, and Prusa MK4 printers. New users book a training session; prints over 12 hours need staff approval.',
+      'The room is always accessible. Before self-service, beginners must book training; experienced users must first check in with staff. Prints over 12 hours on Stratasys/Markforged printers need staff approval.',
     access: 'special',
-    hours: 'unknown',
+    hours: [
+      [r('12am', '12am', 'Room access')], [r('12am', '12am', 'Room access')],
+      [r('12am', '12am', 'Room access')], [r('12am', '12am', 'Room access')],
+      [r('12am', '12am', 'Room access')], [r('12am', '12am', 'Room access')],
+      [r('12am', '12am', 'Room access')],
+    ],
+    holidays: 'regular',
+    breaks: 'regular',
     links: { source: 'https://sites.tufts.edu/bray/3dprintinglab/' },
-    note: 'Room access follows the Bray Lab shop schedule, which is not yet posted for fall 2026.',
-    verified: '2026-09-03',
-    confidence: 'low',
+    note: 'Hours describe room access, not staffed assistance. Training and help follow the Bray shop calendar; Fall 2026 staffed hours are not yet published.',
+    verified: '2026-09-07',
+    confidence: 'high',
   },
   {
     id: 'tisch-dds',
@@ -98,19 +104,22 @@ export const tech: Location[] = [
     holidays: 'closed',
     breaks: 'unknown',
     periods: [
-      // Sunday after the recess follows the regular schedule; LibCal overrides this once published.
-      { period: 'thanksgiving-2026', confidence: 'low', hours: [[r('10am', '9pm')], [], [], [r('11am', '5pm')], [], [], []], note: 'Thanksgiving recess hours (confirm on the library calendar)' },
+      { period: 'thanksgiving-2026', hours: 'unknown', note: 'DDS and building calendars disagree during Thanksgiving; confirm staffed availability' },
     ],
     overrides: [
       { from: '2026-08-31', to: '2026-09-04', hours: [r('10am', '5pm')], note: 'Pre-semester hours' },
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed Labor Day weekend' },
+      { from: '2026-10-12', hours: 'regular', note: 'Regular DDS desk hours published in LibCal' },
+      { from: '2026-11-11', hours: 'regular', note: 'Regular DDS desk hours published in LibCal' },
+      { from: '2026-11-25', to: '2026-11-28', hours: 'unknown', sourceConflict: true, note: 'LibCal lists DDS service beyond Tisch building hours (Nov 25 closes 6 PM; Nov 26–28 closed). Confirm staffed availability.' },
     ],
     links: {
       source: 'https://tischlibrary.tufts.edu/our-locations/also-tisch/digital-design-studio-dds',
       schedule: 'https://tufts.libcal.com/hours',
     },
-    note: 'Staffed desk hours update live from the library calendar.',
-    verified: '2026-09-03',
+    validThrough: '2026-11-28',
+    note: 'LibCal desk hours rechecked Sep 7: Sun–Thu 10 AM–9 PM, Fri 11 AM–5 PM, Sat 10 AM–6 PM. Computers and study space follow Tisch building access; these hours describe staffed services. Later building hours are not yet set.',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -125,13 +134,13 @@ export const tech: Location[] = [
     breaks: 'closed',
     overrides: [
       { from: '2026-09-01', to: '2026-09-24', hours: 'closed', note: 'Drop-in hours start Fri Sep 25' },
-      { from: '2026-12-13', to: '2027-01-19', hours: 'closed', note: 'Fall drop-ins ended Dec 12' },
+      { from: '2026-12-12', to: '2027-01-19', hours: 'closed', note: 'Last Friday drop-in was Dec 11; the published date range ends Sat Dec 12' },
       { from: '2027-01-20', to: '2027-05-14', hours: 'unknown', note: 'Spring drop-in schedule not announced yet' },
     ],
     links: {
       source: 'https://tischlibrary.tufts.edu/our-locations/also-tisch/digital-design-studio-dds/3d-printing/request',
     },
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {
@@ -140,12 +149,12 @@ export const tech: Location[] = [
     category: 'tech',
     building: 'Halligan Hall rooms 223, 225, 229',
     description:
-      'Circuits and electronics labs for ECE/CS students and anyone enrolled in an ECE or CS course. Doors lock at 7 PM on weekdays and all weekend; use your Tufts ID for card access.',
+      'Circuits and electronics labs for ECE/CS students and anyone enrolled in an ECE or CS course. Eligible students have access outside scheduled lab times; contact the department to arrange access.',
     access: 'special',
     hours: 'unknown',
     links: { source: 'https://engineering.tufts.edu/computing/other-facilities' },
     note: 'No public hours; access outside scheduled lab sessions varies by course. Contact staff@eecs.tufts.edu.',
-    verified: '2026-09-03',
+    verified: '2026-09-07',
     confidence: 'high',
   },
   {

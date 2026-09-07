@@ -14,7 +14,7 @@ it('fails a partial dining location without suppressing healthy locations, then 
   const data = await fetchAllLive(NOW);
   expect(data.sources.dining).toBe('error');
   expect(data.failedLocations).toEqual(['carmichael']);
-  expect(data.overrides.carmichael?.[0]?.hours).toBe('unknown');
+  expect(data.overrides.carmichael?.[0]?.hours).toBeUndefined();
   expect(data.overrides.dewick).toBeUndefined();
   expect(console.warn).toHaveBeenCalledWith(expect.stringContaining('breakfast'));
   vi.stubGlobal('fetch', vi.fn(async (url) => response(feedBody(String(url)))));
@@ -57,7 +57,7 @@ it('expires counts and schedules by original fetch time, and rejects invalid sna
   expect(isLiveData({ ...data, overrides: { dewick: [{ from: '2026-09-10', hours: ['closed'], note: '' }] } })).toBe(false);
   expect(usableLive(data, new Date(+NOW + VEHICLES_MAX_AGE_MS)).vehicles).toEqual({});
   const expired = usableLive(data, new Date(+NOW + HOURS_MAX_AGE_MS));
-  expect(expired.overrides.carmichael?.[0]?.hours).toBe('unknown');
+  expect(expired.overrides.carmichael?.[0]?.hours).toBeUndefined();
   expect(expired.fetchedAt).toBe(data.fetchedAt);
   expect(usableLive(data, NOW, true).overrides).toEqual(data.overrides);
   expect(usableLive(data, NOW, true).vehicles).toEqual(data.vehicles);
@@ -152,4 +152,21 @@ it('does not count Tisch as open when its public calendar is unset', async () =>
   const status = computeStatus(locations.find((l) => l.id === 'tisch-library')!, calendar, NOW, data.overrides);
   expect(status.state).toBe('unknown');
   expect(status.detail).toContain('Access hours unconfirmed');
+});
+
+it.each(['closed', 'shorter', 'not-set'])('does not report DDS open when building access is %s', async (mode) => {
+  const grid = libcal();
+  const building = grid.locations.find((l) => l.lid === 20832)!;
+  for (const day of Object.values(building.weeks[0]!)) {
+    day.times = mode === 'shorter'
+      ? { status: 'open', hours: [{ from: '9am', to: '5pm' }] }
+      : { status: mode, hours: [] };
+  }
+  vi.stubGlobal('fetch', vi.fn(async (url) => response(String(url).includes('libcal') ? grid : feedBody(String(url)))));
+  const data = await fetchAllLive(NOW);
+  const { calendar, locations } = await import('../src/data');
+  const { computeStatus } = await import('../src/engine/status');
+  const status = computeStatus(locations.find((l) => l.id === 'tisch-dds')!, calendar, NOW, data.overrides);
+  expect(status.state).toBe('unknown');
+  expect(status.detail).toContain(mode === 'not-set' ? 'not yet confirmed' : 'calendars disagree');
 });

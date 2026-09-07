@@ -91,7 +91,7 @@ describe('resolveDay precedence', () => {
 
   it('keeps regular hours during finals unless a location lists the exam period', () => {
     // Spring finals 2027: no location lists the period, so nothing may fall back to its break default.
-    for (const id of ['dewick', 'health-service', 'tisch-library', 'davis-shuttle']) {
+    for (const id of ['dewick', 'health-service', 'davis-shuttle']) {
       expect(resolveDay(byId(id), '2027-05-10', calendar).source, id).toBe('regular');
     }
     const pub = computeStatus(byId('popup-pub'), calendar, at('2027-05-10', '12:00')); // Mon
@@ -281,6 +281,7 @@ describe('computeStatus', () => {
         expect(st.today).toBe('Hours not published');
       }
     }
+    expect(resolveDay(byId('tisch-library'), '2027-05-10', calendar).hours).toBe('unknown');
     expect(computeStatus(loc, calendar, at('2026-09-05', '12:00')).state).toBe('closed');
     expect(computeStatus(loc, calendar, at('2026-09-08', '12:00')).state).toBe('open');
     expect(computeStatus(loc, calendar, at('2026-09-08', '12:00'), {
@@ -346,7 +347,7 @@ describe('computeStatus', () => {
 
   it('uses the freshly verified Fall 2026 Let’s Talk schedule, not the indexed Fall 2025 page', () => {
     const loc = byId('lets-talk');
-    expect(loc.verified).toBe('2026-09-06');
+    expect(loc.verified).toBe('2026-09-07');
     expect(loc.note).toContain('Fall 2026');
     expect(loc.building).toContain('TP3');
     expect(computeStatus(loc, calendar, at('2026-09-03', '13:00')).state).toBe('closed');
