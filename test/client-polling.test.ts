@@ -17,7 +17,7 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 
-async function setup({ hidden = false, offline = false, age = 0 } = {}) {
+async function setup({ hidden = false, offline = false, age = 0, storage = {} as Record<string, unknown> } = {}) {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T16:00:00Z'));
@@ -38,6 +38,7 @@ async function setup({ hidden = false, offline = false, age = 0 } = {}) {
   window.__RENDERED_AT__ = new Date(Date.now() - age).toISOString();
   document.documentElement.innerHTML = renderPage(locations, computeAll(locations, calendar, new Date()), calendar, snapshot(), new Date(), { beaconToken: 'test-token' });
   HTMLElement.prototype.scrollIntoView = vi.fn();
+  for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, JSON.stringify(value));
   await import('../src/client/main');
   return {
     beacon,
@@ -51,6 +52,26 @@ async function setup({ hidden = false, offline = false, age = 0 } = {}) {
     },
   };
 }
+
+it.each([{}, ['dewick', 42]])('resets malformed persisted pins without crashing', async (saved) => {
+  await setup({ storage: { 'iio:pinned': saved } });
+  expect(localStorage.getItem('iio:pinned')).toBeNull();
+  expect(document.querySelector<HTMLElement>('.group[data-group="pinned"]')!.hidden).toBe(true);
+});
+
+it('discards missing location IDs from persisted pins', async () => {
+  await setup({ storage: { 'iio:pinned': ['dewick', 'retired-location'] } });
+  expect(localStorage.getItem('iio:pinned')).toBe('["dewick"]');
+  expect(document.querySelector<HTMLElement>('#loc-dewick')!.closest<HTMLElement>('.group')!.dataset.group).toBe('pinned');
+});
+
+it.each(['old-category', {}, ['library']])('resets invalid persisted categories to all', async (saved) => {
+  await setup({ storage: { 'iio:cat': saved } });
+  expect(localStorage.getItem('iio:cat')).toBeNull();
+  expect(document.getElementById('list')!.dataset.cat).toBe('all');
+  expect(document.querySelector('.filter[data-cat="all"]')!.classList).toContain('is-active');
+  expect(document.querySelectorAll('.card:not([hidden])').length).toBe(locations.length);
+});
 
 function snapshot(): LiveData {
   return { fetchedAt: new Date().toISOString(), overrides: {}, vehicles: {}, sources: { library: 'ok', dining: 'ok', shuttles: 'ok' } };

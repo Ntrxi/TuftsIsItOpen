@@ -18,10 +18,11 @@ const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
 
 const byId = new Map(locations.map((l) => [l.id, l]));
+const categories = new Set(['all', ...locations.map((l) => l.category)]);
 let live: LiveData = isLiveData(window.__LIVE__) ? window.__LIVE__ : EMPTY_LIVE;
 let disconnected = !navigator.onLine;
-let pinned = new Set<string>(readJson<string[]>(LS_PINNED) ?? []);
-let cat = readJson<string>(LS_CAT) ?? 'all';
+let pinned = readPinned();
+let cat = readCategory();
 let query = '';
 let openOnly = false;
 
@@ -45,12 +46,21 @@ function noteServerTime(iso: string | null | undefined): void {
 /** The current instant, on the server's clock. */
 const now = (): Date => new Date(Date.now() + clockSkewMs);
 
-function readJson<T>(key: string): T | undefined {
+function readJson(key: string): unknown {
   try {
     const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : undefined;
+    return raw === null ? undefined : JSON.parse(raw);
   } catch {
+    removeStored(key);
     return undefined;
+  }
+}
+
+function removeStored(key: string): void {
+  try {
+    localStorage.removeItem(key);
+  } catch {
+    /* private mode etc. */
   }
 }
 
@@ -60,6 +70,25 @@ function writeJson(key: string, value: unknown): void {
   } catch {
     /* private mode etc. */
   }
+}
+
+function readPinned(): Set<string> {
+  const value = readJson(LS_PINNED);
+  if (value === undefined) return new Set();
+  if (!Array.isArray(value) || !value.every((id): id is string => typeof id === 'string')) {
+    removeStored(LS_PINNED);
+    return new Set();
+  }
+  const valid = value.filter((id) => byId.has(id));
+  if (valid.length !== value.length) writeJson(LS_PINNED, valid);
+  return new Set(valid);
+}
+
+function readCategory(): string {
+  const value = readJson(LS_CAT);
+  if (typeof value === 'string' && categories.has(value)) return value;
+  if (value !== undefined) removeStored(LS_CAT);
+  return 'all';
 }
 
 const $ = <T extends Element>(sel: string, root: ParentNode = document): T | null => root.querySelector<T>(sel);
