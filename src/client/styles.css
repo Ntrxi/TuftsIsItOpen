@@ -411,6 +411,10 @@ h1 .sub {
   background: var(--special);
 }
 
+.card[data-state='varies']::before {
+  background: repeating-linear-gradient(180deg, var(--special) 0 4px, transparent 4px 8px);
+}
+
 .card[data-state='unknown']::before {
   background: repeating-linear-gradient(180deg, var(--unknown) 0 4px, transparent 4px 8px);
 }
@@ -462,6 +466,12 @@ h1 .sub {
 .card[data-state='appointment'] .dot,
 .card[data-state='special'] .dot {
   background: var(--special);
+}
+
+.card[data-state='varies'] .dot {
+  background: transparent;
+  border-color: var(--special);
+  border-style: dashed;
 }
 
 .card[data-state='unknown'] .dot {
@@ -538,7 +548,8 @@ h1 .sub {
 }
 
 .card[data-state='appointment'] .state,
-.card[data-state='special'] .state {
+.card[data-state='special'] .state,
+.card[data-state='varies'] .state {
   color: var(--special);
 }
 

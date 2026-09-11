@@ -8,8 +8,9 @@ import { usableLive, type LiveData } from '../engine/live';
 import { record, dateKey } from '../engine/validation';
 import { calendar, locations } from '../data';
 import { resolveDay } from '../engine/status';
-import { sameHours } from '../engine/format';
+import { fmtRange, sameHours } from '../engine/format';
 import { addDays, toLocal } from '../engine/time';
+import { expandIcs, parseIcs, type IcsInstance } from './ics';
 
 const FETCH_TIMEOUT_MS = 6000;
 const UA = 'TuftsIsItOpen/1.0 (+https://github.com/Ntrxi/TuftsIsItOpen)';
@@ -22,6 +23,12 @@ async function getJson(url: string, init: RequestInit = {}): Promise<unknown> {
   });
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
   return await res.json();
+}
+
+async function getText(url: string, accept: string): Promise<string> {
+  const res = await fetch(url, { headers: { accept, 'user-agent': UA }, signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
+  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  return await res.text();
 }
 
 /* LibCal (Tisch Library hours) ------------------------------------------- */
@@ -294,6 +301,93 @@ async function nutrisliceOverrides(todayKey: string): Promise<NutrisliceResult> 
   return { overrides: out, failed: [...failed] };
 }
 
+/* Bray Lab shop calendar (Google Calendar ICS) ---------------------------- */
+
+/**
+ * The Bray home page embeds three public Google calendars. "Open Hours" carries the staffed
+ * open-shop schedule as weekly recurring events (instances are edited or removed for holidays
+ * and short days); "In-Shop Labs" carries course labs plus ad-hoc closures such as heat days.
+ * The third, "Shop Appointments", lists individual bookings and is deliberately not read:
+ * a reservation is not an open-shop period.
+ */
+const BRAY_CALENDARS = {
+  open: 'https://calendar.google.com/calendar/ical/p32gumj98c7h1r3upjb4jundgs%40group.calendar.google.com/public/basic.ics',
+  labs: 'https://calendar.google.com/calendar/ical/braypalls%40gmail.com/public/basic.ics',
+};
+const BRAY_LOC = 'bray-machine-shop';
+const BRAY_OPEN_RE = /\b(open(?: shop)? hours|shop hours|open shop)\b/i;
+const BRAY_CLOSED_RE = /\bclosed\b/i;
+const BRAY_LOOKAHEAD_DAYS = 60;
+
+/** Remove closed stretches from open intervals; touching/overlapping open intervals merge first. */
+function subtractClosures(open: Interval[], closures: Interval[]): Interval[] {
+  let out: Interval[] = [];
+  for (const i of [...open].sort((a, b) => a.start - b.start)) {
+    const last = out[out.length - 1];
+    if (last && i.start <= last.end) last.end = Math.max(last.end, i.end);
+    else out.push({ ...i });
+  }
+  for (const c of closures) {
+    out = out.flatMap((i) => {
+      if (c.end <= i.start || c.start >= i.end) return [i];
+      const parts: Interval[] = [];
+      if (c.start > i.start) parts.push({ ...i, end: c.start });
+      if (c.end < i.end) parts.push({ ...i, start: c.end });
+      return parts;
+    });
+  }
+  return out;
+}
+
+/** Convert calendar instances into dated overrides. Exposed for tests. */
+function brayDayOverrides(open: IcsInstance[], labs: IcsInstance[], removed: { summary: string; key: string }[], from: string, to: string): DateOverride[] {
+  const out: DateOverride[] = [];
+  const quote = (s: string) => `\u201c${s.trim()}\u201d`;
+  const isClosure = (i: IcsInstance) => BRAY_CLOSED_RE.test(i.summary) && !/shop open/i.test(i.summary);
+  const isOpen = (i: IcsInstance) => BRAY_OPEN_RE.test(i.summary) && !isClosure(i);
+  const removedDays = new Set(removed.filter((r) => BRAY_OPEN_RE.test(r.summary)).map((r) => r.key));
+  for (let key = from; key <= to; key = addDays(key, 1)) {
+    const closures = [...open, ...labs].filter((i) => i.key === key && isClosure(i));
+    const allDay = closures.find((i) => i.allDay);
+    if (allDay) {
+      out.push({ from: key, hours: 'closed', note: `Closed: ${quote(allDay.summary)} (Bray Lab calendar)` });
+      continue;
+    }
+    const opens = open.filter((i) => i.key === key && isOpen(i));
+    if (opens.some((i) => i.allDay)) {
+      out.push({ from: key, hours: 'unknown', note: 'The Bray Lab calendar lists open hours for this day without times' });
+      continue;
+    }
+    if (opens.length) {
+      for (const i of [...opens, ...closures]) {
+        if (!Number.isInteger(i.start) || !Number.isInteger(i.end) || i.start < 0 || i.end > 2880 || i.end <= i.start) throw new Error('Invalid Bray calendar interval');
+      }
+      const hours: DayHours = subtractClosures(opens.map((i) => ({ start: i.start, end: i.end, label: 'Open shop' })), closures);
+      const closedNote = closures.map((c) => `Closed ${fmtRange(c)}: ${quote(c.summary)}`).join(' \u00b7 ');
+      const note = `Open shop hours from the Bray Lab calendar${closedNote ? ` \u00b7 ${closedNote}` : ''}`;
+      out.push(hours.length ? { from: key, hours, note } : { from: key, hours: 'closed', note });
+      continue;
+    }
+    if (removedDays.has(key)) out.push({ from: key, hours: 'closed', note: 'No open shop hours on the Bray Lab calendar for this day' });
+  }
+  return out;
+}
+
+async function brayOverrides(todayKey: string): Promise<NutrisliceResult> {
+  const from = addDays(todayKey, -1);
+  const to = addDays(todayKey, BRAY_LOOKAHEAD_DAYS);
+  try {
+    const [openText, labsText] = await Promise.all([getText(BRAY_CALENDARS.open, 'text/calendar'), getText(BRAY_CALENDARS.labs, 'text/calendar')]);
+    const open = expandIcs(parseIcs(openText), from, to);
+    const labs = expandIcs(parseIcs(labsText), from, to);
+    const overrides = brayDayOverrides(open.instances, labs.instances, open.removed, from, to);
+    return { overrides: overrides.length ? { [BRAY_LOC]: overrides } : {}, failed: [] };
+  } catch (error) {
+    console.warn(JSON.stringify({ event: 'live_feed_failure', provider: 'bray', location: BRAY_LOC, reason: String(error) }));
+    return { overrides: {}, failed: [BRAY_LOC] };
+  }
+}
+
 /* Passio GO (shuttle vehicles) -------------------------------------------- */
 
 const PASSIO_SYSTEM = '6670';
@@ -352,11 +446,11 @@ async function passioVehicles(): Promise<Record<string, number>> {
 /** Failed feeds fall back to static schedules; old live closures/openings are discarded. */
 export async function fetchAllLive(now: Date): Promise<LiveData> {
   const todayKey = toLocal(now).key;
-  const [lib, nutri, passio] = await Promise.allSettled([libcalOverrides(todayKey), nutrisliceOverrides(todayKey), passioVehicles()]);
+  const [lib, nutri, bray, passio] = await Promise.allSettled([libcalOverrides(todayKey), nutrisliceOverrides(todayKey), brayOverrides(todayKey), passioVehicles()]);
   const overrides: Record<string, DateOverride[]> = {};
   const sources: LiveData['sources'] = {};
   const failedLocations: string[] = [];
-  for (const [provider, result] of [['library', lib], ['dining', nutri]] as const) {
+  for (const [provider, result] of [['library', lib], ['dining', nutri], ['bray', bray]] as const) {
     if (result.status === 'fulfilled') {
       Object.assign(overrides, result.value.overrides);
       failedLocations.push(...result.value.failed);
@@ -373,5 +467,5 @@ export async function fetchAllLive(now: Date): Promise<LiveData> {
 }
 
 /** Exposed for tests. */
-export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride, parseNutrisliceWeek, libcalDays, LIBCAL_LOCATIONS, NUTRISLICE };
+export const _internal = { parseLibCalTime, libcalDayHours, CLOSED_RE, readMenuDay, nutrisliceDayOverride, parseNutrisliceWeek, libcalDays, LIBCAL_LOCATIONS, NUTRISLICE, BRAY_CALENDARS, BRAY_LOC, brayDayOverrides, subtractClosures };
 export type { Interval };

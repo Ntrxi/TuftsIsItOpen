@@ -12,8 +12,8 @@ const at = (key: string, time: string) => localToDate(key, t(time));
 
 describe('card chips', () => {
   it('avoids a redundant confirmation chip while retaining the unverified indicator', () => {
-    const pub = byId('popup-pub'); // medium
-    expect(renderCard(pub, computeStatus(pub, calendar, at('2026-09-17', '19:00')), EMPTY_LIVE)).not.toContain('Confirm hours');
+    const store = byId('campus-store'); // medium
+    expect(renderCard(store, computeStatus(store, calendar, at('2026-09-17', '12:00')), EMPTY_LIVE)).not.toContain('Confirm hours');
     const nolop = byId('nolop'); // low
     const html = renderCard(nolop, computeStatus(nolop, calendar, at('2026-09-17', '19:00')), EMPTY_LIVE);
     expect(html).toContain('Unverified');

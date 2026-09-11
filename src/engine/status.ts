@@ -11,7 +11,7 @@ import type {
   WeekHours,
 } from './types';
 import { addDays, createTimeContext, DAY_SHORT, dowOf, inRange, toLocal, type LocalTime, type TimeContext } from './time';
-import { fmtDay, fmtMinutesUntil, fmtPeriods, fmtTime, mergeContiguous, sameHours } from './format';
+import { fmtDay, fmtMinutesUntil, fmtPeriods, fmtRangeFlagged, fmtTime, isUncertain, mergeContiguous } from './format';
 
 const LOOKAHEAD_DAYS = 60;
 const OPENING_SOON_MINUTES = 30;
@@ -24,6 +24,8 @@ export interface ResolvedDay {
   /** Why these hours apply; shown to the user when not 'regular'. */
   note?: string;
   source: 'override' | 'holiday' | 'period' | 'regular' | 'unknown';
+  /** No fixed schedule applies (`hours: 'varies'`): availability depends on access conditions. */
+  varies?: true;
 }
 
 /** Extra date-specific overrides supplied at runtime (e.g. from a live feed), keyed by location id. */
@@ -76,11 +78,13 @@ function resolveKnownDate(loc: Location, key: string, dow: number, cal: Calendar
 type DayResolution = Omit<ResolvedDay, 'allowsCarryover'> & { allowsCarryover?: true };
 
 function resolveDayHours(loc: Location, key: string, dow: number, cal: Calendar, ov: DateOverride | undefined): DayResolution {
-  const uncertain = (confidence: Location['confidence']) => confidence === 'low' || confidence === 'medium';
+  const uncertain = isUncertain;
   if (loc.sourceConflict) return { hours: 'unknown', source: 'unknown', note: loc.sourceConflict };
   const conflict = loc.overrides?.find((o) => o.sourceConflict && inRange(key, o.from, o.to ?? o.from));
   if (conflict) return { hours: 'unknown', source: 'override', note: conflict.note };
   const regular = (): DayResolution => {
+    // A place with no fixed schedule stays 'varies' on every date; nothing about it is claimed.
+    if (loc.hours === 'varies') return { hours: 'unknown', source: 'regular', varies: true };
     if (key > cal.through || (loc.validThrough && key > loc.validThrough)) {
       return { hours: 'unknown', source: 'unknown', note: 'Current schedule coverage has ended; check the official page' };
     }
@@ -104,14 +108,19 @@ function resolveDayHours(loc: Location, key: string, dow: number, cal: Calendar,
   // 2. University holidays. A location with no published hours (card access, appointments) is
   //    not reported "Closed for <holiday>" unless it opts in; its hours stay unknown.
   const holiday = cal.holidays.find((h) => h.date === key);
-  const holidayRule = loc.holidays ?? (loc.hours === 'unknown' ? 'regular' : 'closed');
+  const holidayRule = loc.holidays ?? (loc.hours === 'unknown' || loc.hours === 'varies' ? 'regular' : 'closed');
   if (holiday && holidayRule === 'closed') {
     return { hours: [], note: `Closed for ${holiday.name}`, source: 'holiday' };
   }
+  // The source says holiday hours may vary without publishing them: neither open nor closed is supported.
+  if (holiday && holidayRule === 'unknown') {
+    return { hours: 'unknown', note: `${holiday.name}: holiday hours not published`, source: 'holiday' };
+  }
 
   // 3. Past the loaded calendar nothing is known: next year's breaks and holidays are not in the
-  //    data yet. Break behavior is not permission to extend calendar coverage.
-  if (key > cal.through) {
+  //    data yet. Break behavior is not permission to extend calendar coverage. A place with no
+  //    fixed schedule has nothing to extend.
+  if (key > cal.through && loc.hours !== 'varies') {
     return { hours: 'unknown', note: `Hours after ${fmtLongDate(cal.through)} not published yet`, source: 'period' };
   }
 
@@ -159,7 +168,10 @@ interface TimelineInterval extends Interval {
 
 interface Timeline {
   days: TimelineDay[];
+  /** Confirmed service intervals. */
   intervals: TimelineInterval[];
+  /** Intervals whose published times are unconfirmed: unknown state unless a confirmed interval also covers the instant. */
+  unconfirmed: TimelineInterval[];
   spans: Interval[];
   limit: number;
   time: TimeContext;
@@ -189,23 +201,28 @@ function resolveTimeline(loc: Location, cal: Calendar, key: string, time: TimeCo
     }
   }
   const intervals: TimelineInterval[] = [];
+  const unconfirmed: TimelineInterval[] = [];
   for (const interval of candidates) {
     const barrier = days.find(day => day.key > interval.serviceDate && !day.resolved.allowsCarryover);
     const end = Math.min(interval.end, barrier?.start ?? limit, limit);
-    if (end > interval.start) intervals.push({ ...interval, end, cutoff: barrier && barrier.start < interval.end ? barrier : undefined });
+    if (end > interval.start) {
+      (isUncertain(interval.confidence) ? unconfirmed : intervals).push({ ...interval, end, cutoff: barrier && barrier.start < interval.end ? barrier : undefined });
+    }
   }
   for (const day of days) {
     // Display service-start-day ranges, preserving their overnight ends. Only
     // explicit closure/unknown boundaries clip them; midnight itself does not.
-    day.hours = day.resolved.hours === 'unknown' ? 'unknown' : intervals
+    day.hours = day.resolved.hours === 'unknown' ? 'unknown' : [...intervals, ...unconfirmed]
       .filter(i => i.serviceDate === day.key)
+      .sort((a, b) => a.start - b.start)
       .map(i => ({
         start: relativeMinutes(time.local(i.start), day.key),
         end: relativeMinutes(time.local(i.end), day.key),
         ...(i.label ? { label: i.label } : {}), ...(i.access ? { access: i.access } : {}),
+        ...(isUncertain(i.confidence) ? { confidence: i.confidence } : {}),
       }));
   }
-  return { days, intervals, spans: mergeContiguous(intervals), limit, time };
+  return { days, intervals, unconfirmed, spans: mergeContiguous(intervals), limit, time };
 }
 
 function relativeMinutes(local: LocalTime, key: string): number {
@@ -228,18 +245,37 @@ function statusTimeline(loc: Location, cal: Calendar, key: string, at: number, t
 }
 
 function unknownAt(timeline: Timeline, at: number): boolean {
-  return timeline.days.some(day => day.hours === 'unknown' && contains(day, at));
+  return unknownKind(timeline, at) !== undefined;
+}
+
+/** Why nothing definite is known at an instant: the whole day is unpublished, or only an unconfirmed interval covers it. */
+function unknownKind(timeline: Timeline, at: number): 'day' | 'interval' | undefined {
+  if (timeline.days.some(day => day.hours === 'unknown' && contains(day, at))) return 'day';
+  if (timeline.unconfirmed.some(i => contains(i, at)) && !timeline.intervals.some(i => contains(i, at))) return 'interval';
+  return undefined;
 }
 
 function confirmedEnd(timeline: Timeline, span: Interval): boolean {
   return span.end < timeline.limit && !unknownAt(timeline, span.end);
 }
 
-function nextEvent(timeline: Timeline, at: number): { at: number; unknown: boolean } | undefined {
+interface NextEvent {
+  at: number;
+  unknown: boolean;
+  /** The unknown stretch is an unconfirmed interval rather than an unpublished day. */
+  interval?: boolean;
+}
+
+function nextEvent(timeline: Timeline, at: number): NextEvent | undefined {
   const opening = timeline.spans.find(span => span.start > at)?.start;
-  const unknown = timeline.days.find(day => day.start > at && day.hours === 'unknown')?.start;
-  if (unknown !== undefined && (opening === undefined || unknown <= opening)) return { at: unknown, unknown: true };
-  return opening === undefined ? undefined : { at: opening, unknown: false };
+  const candidates: NextEvent[] = opening === undefined ? [] : [{ at: opening, unknown: false }];
+  const day = timeline.days.find(day => day.start > at && day.hours === 'unknown');
+  if (day) candidates.push({ at: day.start, unknown: true });
+  for (const i of timeline.unconfirmed) {
+    if (i.start > at && !timeline.intervals.some(c => contains(c, i.start))) candidates.push({ at: i.start, unknown: true, interval: true });
+  }
+  // Ties favour uncertainty: an opening that coincides with unknown hours is not confirmed.
+  return candidates.sort((a, b) => a.at - b.at || Number(b.unknown) - Number(a.unknown))[0];
 }
 
 function periodAt(timeline: Timeline, at: number): TimelineInterval | undefined {
@@ -273,7 +309,7 @@ function transitions(loc: Location, timeline: Timeline, at: number): Pick<Status
   for (let i = 1; i < timeline.days.length; i++) {
     if ((timeline.days[i]!.hours === 'unknown') !== (timeline.days[i - 1]!.hours === 'unknown')) candidates.add(timeline.days[i]!.start);
   }
-  for (const i of timeline.intervals) { candidates.add(i.start); candidates.add(i.end); }
+  for (const i of [...timeline.intervals, ...timeline.unconfirmed]) { candidates.add(i.start); candidates.add(i.end); }
   for (const span of timeline.spans) {
     candidates.add(openingThreshold(span.start));
     if (confirmedEnd(timeline, span)) candidates.add(closingThreshold(loc, span));
@@ -301,6 +337,7 @@ interface NextOpen {
   minutesUntil: number;
   daysAhead: number;
   unknown?: boolean;
+  interval?: boolean;
 }
 
 function findNextOpen(timeline: Timeline, at: number): NextOpen | undefined {
@@ -308,11 +345,16 @@ function findNextOpen(timeline: Timeline, at: number): NextOpen | undefined {
   if (!next) return undefined;
   const local = timeline.time.local(next.at);
   const daysAhead = timeline.days.findIndex(day => day.key === local.key) - 1;
-  return { key: local.key, start: local.minutes, minutesUntil: Math.ceil((next.at - at) / 60000), daysAhead, unknown: next.unknown };
+  return { key: local.key, start: local.minutes, minutesUntil: Math.ceil((next.at - at) / 60000), daysAhead, unknown: next.unknown, interval: next.interval };
 }
 
 function describeNextOpen(next: NextOpen | undefined, verb: string): string {
   if (!next) return `Nothing scheduled in the next ${LOOKAHEAD_DAYS} days`;
+  if (next.unknown && next.interval) {
+    const time = fmtTime(next.start);
+    return next.daysAhead === 0 ? `Hours unconfirmed from ${time}`
+      : next.daysAhead === 1 ? `Hours unconfirmed from tomorrow ${time}` : `Hours unconfirmed from ${DAY_SHORT[dowOf(next.key)]} ${time}`;
+  }
   if (next.unknown) {
     return next.daysAhead === 1 ? 'Hours not published for tomorrow' : `Hours not published from ${DAY_SHORT[dowOf(next.key)]}`;
   }
@@ -328,29 +370,24 @@ function describeNextOpen(next: NextOpen | undefined, verb: string): string {
 }
 
 function timelineOverview(timeline: Timeline): HoursLine[] {
-  const days = timeline.days.slice(1, 8).map(day => ({ dow: dowOf(day.key), hours: day.hours }));
+  const days = timeline.days.slice(1, 8).map(day => ({ dow: dowOf(day.key), text: displayDay(day) }));
   const lines: HoursLine[] = [];
-  const first = days[0]!;
-  lines.push({ days: 'Today', text: displayDay(first.hours), isToday: true });
+  lines.push({ days: 'Today', text: days[0]!.text, isToday: true });
   let i = 1;
   while (i < days.length) {
     const start = days[i]!;
     let j = i;
-    while (j + 1 < days.length && sameDay(days[j + 1]!.hours, start.hours)) j++;
+    while (j + 1 < days.length && days[j + 1]!.text === start.text) j++;
     const label = j === i ? DAY_SHORT[start.dow]! : `${DAY_SHORT[start.dow]}–${DAY_SHORT[days[j]!.dow]}`;
-    lines.push({ days: label, text: displayDay(start.hours) });
+    lines.push({ days: label, text: start.text });
     i = j + 1;
   }
   return lines;
 }
 
-function displayDay(hours: DayHours | 'unknown'): string {
-  return fmtDay(hours === 'unknown' ? hours : mergeContiguous(hours));
-}
-
-function sameDay(a: DayHours | 'unknown', b: DayHours | 'unknown'): boolean {
-  if (a === 'unknown' || b === 'unknown') return a === b;
-  return sameHours(mergeContiguous(a), mergeContiguous(b));
+function displayDay(day: TimelineDay): string {
+  if (day.hours === 'unknown') return day.resolved.varies ? stateLabel('varies') : fmtDay('unknown');
+  return fmtDay(mergeContiguous(day.hours));
 }
 
 export function stateLabel(state: State): string {
@@ -371,6 +408,8 @@ export function stateLabel(state: State): string {
       return 'Appointment only';
     case 'special':
       return 'Special access';
+    case 'varies':
+      return 'Access varies';
     case 'unknown':
       return 'Hours unknown';
   }
@@ -410,20 +449,37 @@ function statusWithTime(loc: Location, cal: Calendar, instant: number, time: Tim
   const carryover = timeline.intervals.filter(i => i.serviceDate < now.key && contains(i, instant));
   const carryoverEnd = carryover.length ? Math.max(...carryover.map(i => i.end)) : undefined;
   const notes = [todayRes.note];
+  const unconfirmedToday = today.hours === 'unknown' ? [] : today.hours.filter(i => isUncertain(i.confidence))
+    .map(i => `${i.label ? `${i.label}: ` : ''}${fmtRangeFlagged(i)}`);
+  if (unconfirmedToday.length) notes.push('Some of today\u2019s hours are unconfirmed; check the official page');
   if (cutoff) notes.push(`${cutoff.hours === 'unknown' ? 'Overnight hours are unknown after midnight' : 'Overnight service ends at midnight'}: ${cutoff.resolved.note ?? 'Check the next day’s schedule'}`);
   if (carryoverEnd !== undefined) notes.push(`Overnight service from yesterday until ${fmtTime(time.local(carryoverEnd).minutes)}`);
   if (today.invalid) notes.push('An invalid schedule interval was omitted; check the official page');
   const week = timelineOverview(timeline);
   const todayText = Array.isArray(today.hours) && today.hours.length === 0 && carryover.length
-    ? 'No service starts today' : displayDay(today.hours);
+    ? 'No service starts today' : displayDay(today);
   week[0]!.text = todayText;
   const base = {
     id: loc.id,
     week,
     isSpecial: !!cutoff || (todayRes.source !== 'regular' && todayRes.source !== 'unknown'),
     scheduleNote: notes.filter(Boolean).join(' · ') || undefined,
+    ...(unconfirmedToday.length ? { unconfirmed: unconfirmedToday } : {}),
     ...transition,
   };
+
+  if (today.hours === 'unknown' && todayRes.varies) {
+    // No fixed schedule exists. The access model is named, but nothing is claimed to be open, so
+    // the card never counts toward the Open-now filter.
+    return {
+      ...base,
+      state: 'varies',
+      label: stateLabel('varies'),
+      detail: loc.availability ?? 'Availability depends on access conditions; see details',
+      today: stateLabel('varies'),
+      todayPeriods: [],
+    };
+  }
 
   if (today.hours === 'unknown') {
     // Nothing is published for today. A facility with a known access model (card access,
@@ -476,6 +532,22 @@ function statusWithTime(loc: Location, cal: Calendar, instant: number, time: Tim
       detail,
       period: period?.label,
       periodEnds: period && period.end < span.end ? fmtTime(time.local(period.end).minutes) : undefined,
+      today: todayText,
+      todayPeriods,
+      nextDepartures: departures,
+    };
+  }
+
+  if (state === 'unknown' && unknownKind(timeline, instant) === 'interval') {
+    // Inside an interval whose published times are ambiguous: neither open nor closed is supported.
+    const until = transition.nextTransitionAt === undefined ? undefined : time.local(Date.parse(transition.nextTransitionAt));
+    const untilText = until === undefined ? ''
+      : ` until ${until.key === now.key ? '' : until.key === addDays(now.key, 1) ? 'tomorrow ' : `${DAY_SHORT[until.dow]} `}${fmtTime(until.minutes)}`;
+    return {
+      ...base,
+      state,
+      label: stateLabel(state),
+      detail: `Hours unconfirmed${untilText}; check the official page`,
       today: todayText,
       todayPeriods,
       nextDepartures: departures,

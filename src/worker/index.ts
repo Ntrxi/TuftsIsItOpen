@@ -1,6 +1,6 @@
 import { calendar, locations } from '../data';
 import { computeAll } from '../engine/status';
-import { EMPTY_LIVE, isLiveData, usableLive, type LiveData } from '../engine/live';
+import { EMPTY_LIVE, isLiveData, LIVE_SOURCES, usableLive, type LiveData } from '../engine/live';
 import { record } from '../engine/validation';
 import { fetchAllLive } from './live';
 
@@ -12,8 +12,8 @@ export interface Env {
 const LIVE_FRESH_MS = 60_000;
 /** Hard cap on how old a snapshot may be before we block on a fresh fetch. */
 const LIVE_MAX_AGE_MS = 15 * 60_000;
-// Older snapshots lack structured interval access and must be fetched again.
-const LIVE_CACHE_KEY = 'https://live.tufts-is-it-open.internal/snapshot-v2';
+// Older snapshots lack structured interval access or the Bray calendar source and must be fetched again.
+const LIVE_CACHE_KEY = 'https://live.tufts-is-it-open.internal/snapshot-v3';
 
 let memory: { data: LiveData; at: number } | undefined;
 let inflight: Promise<LiveData> | undefined;
@@ -149,7 +149,7 @@ export default {
 
     if (path === '/healthz') {
       const live = await getLive(ctx, true);
-      const ok = ['library', 'dining', 'shuttles'].every((id) => ['ok', 'stale'].includes(live.sources[id] ?? '')) && !live.failedLocations?.length;
+      const ok = LIVE_SOURCES.every((id) => ['ok', 'stale'].includes(live.sources[id] ?? '')) && !live.failedLocations?.length;
       return json({ ok, fetchedAt: live.fetchedAt || null, ageSeconds: live.fetchedAt ? Math.max(0, Math.floor((Date.now() - Date.parse(live.fetchedAt)) / 1000)) : null,
         sources: live.sources, failedLocations: live.failedLocations ?? [] },
       { status: ok ? 200 : 503, headers: { 'cache-control': 'no-store' } });

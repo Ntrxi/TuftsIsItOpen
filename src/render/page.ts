@@ -65,7 +65,7 @@ export function renderPage(locations: Location[], opts: PageOptions = {}): strin
   <div class="colophon">
     <span class="credit">Built by Aaron Chung, a Tufts student.</span>
   </div>
-  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, and the shuttle tracker<span id="live-sources"></span>. Always confirm before a special trip.</p>
+  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, the Bray Lab shop calendar, and the shuttle tracker<span id="live-sources"></span>. Always confirm before a special trip.</p>
 </footer>${beacon}
 </body>
 </html>`;

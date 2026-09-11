@@ -84,7 +84,7 @@ describe('resolveDay precedence', () => {
     expect(bray.label).toBe('Appointment only');
     expect(bray.scheduleNote).toBeUndefined();
     const halligan = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-07', '12:00'));
-    expect(halligan.label).toBe('Special access');
+    expect(halligan.label).toBe('Access varies');
     // Locations with real hours still close.
     expect(computeStatus(byId('hodgdon'), calendar, at('2026-09-07', '12:00')).state).toBe('closed');
   });
@@ -96,7 +96,7 @@ describe('resolveDay precedence', () => {
     }
     const pub = computeStatus(byId('popup-pub'), calendar, at('2027-05-10', '12:00')); // Mon
     expect(pub.state).toBe('unknown');
-    expect(pub.detail).toContain('unconfirmed');
+    expect(pub.detail).toContain('coverage has ended');
   });
 
   it('applies named break periods', () => {
@@ -231,9 +231,11 @@ describe('computeStatus', () => {
   it('names the access model for facilities without public hours but never counts them as open', () => {
     for (const time of ['12:00', '3:00']) {
       const halligan = computeStatus(byId('halligan-ece-labs'), calendar, at('2026-09-10', time));
-      expect(halligan.state).toBe('unknown');
-      expect(halligan.label).toBe('Special access');
-      expect(halligan.detail).toBe('No posted hours; see details');
+      expect(halligan.state).toBe('varies');
+      expect(halligan.label).toBe('Access varies');
+      expect(halligan.detail).toBe('Available to eligible ECE/CS students outside scheduled labs');
+      expect(halligan.today).toBe('Access varies');
+      expect(halligan.week.every((line) => line.text === 'Access varies')).toBe(true);
       const bray = computeStatus(byId('bray-machine-shop'), calendar, at('2026-09-10', time));
       expect(bray.state).toBe('unknown');
       expect(bray.label).toBe('Appointment only');
@@ -487,7 +489,7 @@ describe('schedule safety regressions', () => {
     }
   });
   it('keeps unresolved official-source conflicts unknown, even with an override', () => {
-    const loc = byId('tts-walkup');
+    const loc = { ...byId('tts-walkup'), sourceConflict: 'Official sources disagree on walk-up hours' };
     expect(computeStatus(loc, calendar, at('2026-09-16', '12:00')).detail).toContain('disagree');
     expect(resolveDay(loc, '2026-09-16', calendar, [{ from: '2026-09-16', hours: 'closed', note: '' }]).hours).toBe('unknown');
     expect(byId('nolop').hours).toBe('unknown');

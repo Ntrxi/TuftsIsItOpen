@@ -71,7 +71,7 @@ it.each(['old-category', {}, ['library']])('resets invalid persisted categories 
 });
 
 function snapshot(): LiveData {
-  return { fetchedAt: new Date().toISOString(), overrides: {}, vehicles: {}, sources: { library: 'ok', dining: 'ok', shuttles: 'ok' } };
+  return { fetchedAt: new Date().toISOString(), overrides: {}, vehicles: {}, sources: { library: 'ok', dining: 'ok', bray: 'ok', shuttles: 'ok' } };
 }
 
 it('fetches live data on load, then polls visible tabs every two minutes and pauses hidden and offline tabs', async () => {

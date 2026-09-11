@@ -90,6 +90,7 @@ it.each([61, 120, 180])('retains snapshots when the device is %i seconds slow', 
 it('keeps the client feed location lists tied to the worker providers', () => {
   expect(FEED_LOCATIONS.library.slice().sort()).toEqual(_internal.LIBCAL_LOCATIONS.map((l) => l.locId).sort());
   expect(FEED_LOCATIONS.dining.slice().sort()).toEqual(_internal.NUTRISLICE.map((l) => l.locId).sort());
+  expect(FEED_LOCATIONS.bray).toEqual([_internal.BRAY_LOC]);
 });
 
 it('isolates unreadable future LibCal days and preserves static overrides on not-set days', async () => {

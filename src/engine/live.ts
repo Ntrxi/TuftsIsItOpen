@@ -24,13 +24,16 @@ export const CLOCK_SKEW_TOLERANCE_MS = 3 * 60_000;
 export const FEED_LOCATIONS = {
   library: ['tisch-library', 'tisch-dds', 'ginn-library', 'lilly-music-library'],
   dining: ['dewick', 'carmichael', 'commons', 'hodgdon', 'hotung', 'kindlevan', 'mugar-cafe', 'pax-et-lox', 'tower-cafe', 'smfa-cafe'],
+  bray: ['bray-machine-shop'],
 };
+/** Every provider a snapshot must report on. */
+export const LIVE_SOURCES = ['library', 'dining', 'bray', 'shuttles'];
 
 export function isLiveData(value: unknown): value is LiveData {
   if (!record(value) || typeof value.fetchedAt !== 'string' || !Number.isFinite(Date.parse(value.fetchedAt)) ||
       !record(value.overrides) || !record(value.vehicles) || !record(value.sources)) return false;
   const sources = value.sources;
-  if (!['library', 'dining', 'shuttles'].every((id) => typeof sources[id] === 'string' && ['ok', 'stale', 'error', 'empty'].includes(sources[id]))) return false;
+  if (!LIVE_SOURCES.every((id) => typeof sources[id] === 'string' && ['ok', 'stale', 'error', 'empty'].includes(sources[id]))) return false;
   if (value.failedLocations !== undefined && (!Array.isArray(value.failedLocations) || !value.failedLocations.every((id) => typeof id === 'string'))) return false;
   return Object.values(value.vehicles).every((n) => Number.isInteger(n) && Number(n) >= 0) &&
     Object.values(value.overrides).every((list) => Array.isArray(list) && list.every((o) => {

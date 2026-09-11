@@ -4,6 +4,8 @@
  * (e.g. 21:00–02:00 is { start: 1260, end: 1560 }).
  */
 
+export type Confidence = 'high' | 'medium' | 'low';
+
 export type Category =
   | 'dining'
   | 'mail'
@@ -20,6 +22,12 @@ export interface Interval {
   label?: string;
   /** Access during this interval, independent of its display label. */
   access?: AccessMode | 'unknown';
+  /**
+   * Low/medium marks an interval whose published times are ambiguous or unverified. The engine
+   * reports 'unknown' inside it (unless a confirmed interval also covers the instant) and keeps
+   * the rest of the day usable; the display flags it as unconfirmed.
+   */
+  confidence?: Confidence;
 }
 
 /** A day's hours. Empty array = closed all day. */
@@ -28,7 +36,11 @@ export type DayHours = Interval[];
 /** Sunday-first week: index 0 = Sunday … 6 = Saturday. */
 export type WeekHours = [DayHours, DayHours, DayHours, DayHours, DayHours, DayHours, DayHours];
 
-export type HoursSpec = WeekHours | 'closed' | 'unknown';
+/**
+ * 'unknown': hours exist but are not published. 'varies': there is no fixed public schedule at
+ * all; availability depends on access conditions described by `availability`.
+ */
+export type HoursSpec = WeekHours | 'closed' | 'unknown' | 'varies';
 
 /** Hours for a specific date or date range, e.g. Labor Day or first week of classes. */
 export interface DateOverride {
@@ -36,7 +48,7 @@ export interface DateOverride {
   sourceConflict?: boolean;
   /** Higher values win within static or live overrides. Equal-priority overlaps are invalid. */
   priority?: number;
-  confidence?: 'high' | 'medium' | 'low';
+  confidence?: Confidence;
   /** YYYY-MM-DD, inclusive. */
   from: string;
   /** YYYY-MM-DD, inclusive. Defaults to `from`. */
@@ -52,7 +64,7 @@ export interface DateOverride {
 
 /** Hours during a named calendar period (e.g. 'thanksgiving-2026'). */
 export interface PeriodHours {
-  confidence?: 'high' | 'medium' | 'low';
+  confidence?: Confidence;
   period: string;
   hours: WeekHours | 'closed' | 'unknown' | 'regular';
   note?: string;
@@ -84,8 +96,16 @@ export interface Location {
   access?: AccessMode;
   /** Regular academic-year hours. */
   hours: HoursSpec;
-  /** Behavior on university holidays. Default 'closed', or 'regular' when `hours` is 'unknown'. */
-  holidays?: 'closed' | 'regular';
+  /**
+   * One sentence describing when the place is usable when `hours` is 'varies', e.g.
+   * "Available to eligible students outside scheduled labs". Shown instead of a schedule.
+   */
+  availability?: string;
+  /**
+   * Behavior on university holidays. Default 'closed', or 'regular' when `hours` is 'unknown' or
+   * 'varies'. 'unknown' for a source that says holiday hours vary without publishing them.
+   */
+  holidays?: 'closed' | 'regular' | 'unknown';
   /**
    * Default behavior during calendar breaks and summer when no `periods` entry matches. Default
    * 'unknown'. Exam periods are not breaks: hours stay regular unless listed in `periods`.
@@ -110,7 +130,7 @@ export interface Location {
   transit?: TransitInfo;
   /** YYYY-MM-DD the hours were last checked against the source. */
   verified?: string;
-  confidence?: 'high' | 'medium' | 'low';
+  confidence?: Confidence;
   /** Unresolved disagreement between official sources; do not choose a schedule. */
   sourceConflict?: string;
   /** Last date supported by the regular schedule, independent of the calendar horizon. */
@@ -146,6 +166,7 @@ export type State =
   | 'not_running'
   | 'appointment'
   | 'special'
+  | 'varies'
   | 'unknown';
 
 export interface HoursLine {
@@ -173,6 +194,8 @@ export interface Status {
   todayPeriods: string[];
   /** Note explaining why hours differ today (holiday/break/override). */
   scheduleNote?: string;
+  /** Today's intervals whose times are unconfirmed, formatted like `todayPeriods`. */
+  unconfirmed?: string[];
   /** True for override/holiday/break hours or when a next-day exception truncates today's service. */
   isSpecial: boolean;
   /** Service-day overview starting today, preserving overnight ends; first row matches `today`. */

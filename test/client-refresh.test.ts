@@ -36,7 +36,7 @@ it('retains recent data through failures, expires by age, and recovers without A
   vi.useFakeTimers();
   const now = new Date('2026-09-10T16:00:00Z');
   vi.setSystemTime(now);
-  const data: LiveData = { fetchedAt: now.toISOString(), sources: { library: 'ok', dining: 'ok', shuttles: 'ok' },
+  const data: LiveData = { fetchedAt: now.toISOString(), sources: { library: 'ok', dining: 'ok', bray: 'ok', shuttles: 'ok' },
     overrides: { carmichael: [{ from: '2026-09-10', hours: 'closed', note: 'Feed closure' }] }, vehicles: { 'davis-shuttle': 3 } };
   document.body.innerHTML = locations.filter((l) => ['carmichael', 'davis-shuttle'].includes(l.id)).map(renderPendingCard).join('');
   vi.stubGlobal('AbortSignal', { timeout: undefined });
