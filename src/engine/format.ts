@@ -1,4 +1,9 @@
-import type { DayHours, Interval } from './types';
+import type { Confidence, DayHours, Interval } from './types';
+
+/** Low/medium confidence means a schedule, override, period, or interval cannot support a definite state. */
+export function isUncertain(confidence?: Confidence): boolean {
+  return confidence === 'low' || confidence === 'medium';
+}
 
 /** 1260 -> "9:00 PM", 0 -> "12:00 AM", 1440 -> "12:00 AM". */
 export function fmtTime(minutes: number, opts: { compact?: boolean } = {}): string {
@@ -25,25 +30,30 @@ export function fmtRange(i: Interval): string {
 export function fmtDay(day: DayHours | 'closed' | 'unknown'): string {
   if (day === 'unknown') return 'Hours not published';
   if (day === 'closed' || day.length === 0) return 'Closed';
-  if (day.length === 1 && day[0]!.start === 0 && day[0]!.end === 1440) return '24 hours';
-  return mergeContiguous(day).map(fmtRange).join(', ');
+  if (day.length === 1 && day[0]!.start === 0 && day[0]!.end === 1440 && !isUncertain(day[0]!.confidence)) return '24 hours';
+  return mergeContiguous(day).map(fmtRangeFlagged).join(', ');
+}
+
+/** "7:00 – 8:15 AM (unconfirmed)" for an interval whose published times are ambiguous. */
+export function fmtRangeFlagged(i: Interval): string {
+  return `${fmtRange(i)}${isUncertain(i.confidence) ? ' (unconfirmed)' : ''}`;
 }
 
 /** Labeled periods for a day: ["Breakfast: 7:00 – 10:30 AM", …]. */
 export function fmtPeriods(day: DayHours): string[] {
-  return day.filter((i) => i.label).map((i) => `${i.label}: ${fmtRange(i)}`);
+  return day.filter((i) => i.label).map((i) => `${i.label}: ${fmtRangeFlagged(i)}`);
 }
 
-/** Merge touching/overlapping intervals into spans for the overview line. */
+/** Merge touching/overlapping intervals into spans for the overview line. Unconfirmed intervals never merge with confirmed ones. */
 export function mergeContiguous(day: DayHours): Interval[] {
   const sorted = [...day].sort((a, b) => a.start - b.start);
   const out: Interval[] = [];
   for (const i of sorted) {
     const last = out[out.length - 1];
-    if (last && i.start <= last.end) {
+    if (last && i.start <= last.end && isUncertain(last.confidence) === isUncertain(i.confidence)) {
       last.end = Math.max(last.end, i.end);
     } else {
-      out.push({ start: i.start, end: i.end });
+      out.push({ start: i.start, end: i.end, ...(isUncertain(i.confidence) ? { confidence: i.confidence } : {}) });
     }
   }
   return out;
@@ -62,7 +72,8 @@ export function sameHours(a: DayHours, b: DayHours): boolean {
   if (a.length !== b.length) return false;
   return a.every((x, i) => {
     const y = b[i]!;
-    return x.start === y.start && x.end === y.end && (x.label ?? '') === (y.label ?? '') && x.access === y.access;
+    return x.start === y.start && x.end === y.end && (x.label ?? '') === (y.label ?? '') && x.access === y.access &&
+      isUncertain(x.confidence) === isUncertain(y.confidence);
   });
 }
 

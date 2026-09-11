@@ -50,7 +50,7 @@ export const mail: Location[] = [
     category: 'mail',
     building: '46 Professors Row',
     description: 'Tufts University Official Bookstore, run by Barnes & Noble College. Textbooks, supplies, and Tufts gear.',
-    hours: [[r('10am', '4pm')], [r('10am', '5pm')], [r('9am', '5pm')], [r('8am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], [r('12pm', '4pm')]],
+    hours: [[], [r('9am', '5pm')], [r('9am', '5pm')], [r('8am', '5pm')], [r('9am', '5pm')], [r('9am', '5pm')], [r('12pm', '4pm')]],
     holidays: 'closed',
     breaks: 'regular',
     overrides: [
@@ -65,8 +65,8 @@ export const mail: Location[] = [
     links: {
       source: 'https://tufts.bncollege.com/',
     },
-    note: 'The current store page lists weekday/weekend hours without effective dates. This pattern is not verified as a semester schedule; confirm before a special trip.',
-    verified: '2026-09-07',
+    note: 'The store site lists hours without effective dates, and they changed between Sep 7 (Mon 10–5, Sun 10–4) and Sep 11 (Mon 9–5, Sun closed). The site is served behind Akamai bot protection with no machine-readable hours, so it cannot be read live; the pattern shown is not verified as a semester schedule. Confirm before a special trip.',
+    verified: '2026-09-11',
     confidence: 'medium',
   },
   {

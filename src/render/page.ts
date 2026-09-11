@@ -70,7 +70,7 @@ export function renderPage(
   <div class="colophon">
     <span class="credit">Built by Aaron Chung, a Tufts student.</span>
   </div>
-  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, and the shuttle tracker<span id="live-sources">${liveSources ? ` (${esc(liveSources)})` : ''}</span>. Always confirm before a special trip.</p>
+  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, the Bray Lab shop calendar, and the shuttle tracker<span id="live-sources">${liveSources ? ` (${esc(liveSources)})` : ''}</span>. Always confirm before a special trip.</p>
 </footer>
 <script>window.__LIVE__=${liveJson};window.__RENDERED_AT__=${JSON.stringify(at.toISOString())};</script>${beacon}
 </body>

@@ -1,4 +1,4 @@
-import type { Location, WeekHours } from '../engine/types';
+import type { Interval, Location, WeekHours } from '../engine/types';
 import { r } from '../engine/format';
 
 const REC = 'Rec swim';
@@ -12,6 +12,15 @@ const summerFitness: WeekHours = [
   [r('7am', '6pm')], // Fri
   [r('8am', '12pm')], // Sat
 ];
+
+/**
+ * The Athletics page prints the Mon–Thu morning rec swim as "7pm-8:15am", which contradicts its
+ * own evening session (7:30–9:50 PM) and the building's 11 PM close. Friday reads "7am-8:15am".
+ * The morning slot is kept as an unconfirmed interval rather than corrected: the engine reports
+ * unknown between 7 and 8:15 AM and keeps the unambiguous sessions usable.
+ */
+const ambiguousMorning: Interval = { ...r('7am', '8:15am', REC), confidence: 'low' };
+const weekdayPool = (evening: boolean) => [ambiguousMorning, r('11:30am', '1:30pm', REC), ...(evening ? [r('7:30pm', '9:50pm', REC)] : [])];
 
 export const recreation: Location[] = [
   {
@@ -62,10 +71,10 @@ export const recreation: Location[] = [
       'Recreational swim times. Lanes may be reduced by lessons, and club swim uses 4 lanes Mon–Thu 8:30–9:45 PM.',
     hours: [
       [r('12pm', '4pm', REC)], // Sun
-      [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC), r('7:30pm', '9:50pm', REC)],
-      [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC), r('7:30pm', '9:50pm', REC)],
-      [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC), r('7:30pm', '9:50pm', REC)],
-      [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC), r('7:30pm', '9:50pm', REC)],
+      weekdayPool(true),
+      weekdayPool(true),
+      weekdayPool(true),
+      weekdayPool(true),
       [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC)], // Fri
       [r('12pm', '4pm', REC)], // Sat
     ],
@@ -74,12 +83,7 @@ export const recreation: Location[] = [
     overrides: [
       { from: '2026-09-01', to: '2026-09-07', hours: 'unknown', note: 'Fall rec swim schedule starts Sep 8' },
       { from: '2026-10-31', hours: 'closed', note: 'No rec swim Oct 31' },
-      {
-        from: '2026-11-24',
-        confidence: 'medium',
-        hours: [r('7am', '8:15am', REC), r('11:30am', '1:30pm', REC)],
-        note: 'No evening rec swim Nov 24; the Mon–Thu morning AM/PM typo remains unconfirmed',
-      },
+      { from: '2026-11-24', hours: weekdayPool(false), note: 'No evening rec swim Nov 24' },
       { from: '2026-11-25', to: '2026-11-29', hours: 'closed', note: 'Closed for Thanksgiving' },
       { from: '2026-12-19', to: '2027-01-19', hours: 'closed', note: 'No rec swim over winter break' },
     ],
@@ -87,8 +91,8 @@ export const recreation: Location[] = [
       source: 'https://gotuftsjumbos.com/sports/2022/5/6/facilities-Reservation.aspx',
     },
     validThrough: '2027-01-19',
-    note: 'The official Mon–Thu morning entry reads 7 PM–8:15 AM, conflicting with its other swim sessions. Confirm rec swim times with athletics. Spring 2027 times are not posted.',
-    verified: '2026-09-07',
-    confidence: 'medium',
+    note: 'The official Mon–Thu morning entry reads 7 PM–8:15 AM, conflicting with its other swim sessions, so the 7–8:15 AM slot is shown as unconfirmed rather than corrected. Fall schedule Sep 8–Jan 19; spring 2027 times are not posted.',
+    verified: '2026-09-11',
+    confidence: 'high',
   },
 ];

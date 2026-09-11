@@ -31,7 +31,7 @@ describe('live snapshot cache and health', () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const second = await request('/api/live');
     const data = await second.json() as LiveData;
-    expect(data.sources).toEqual({ library: 'error', dining: 'error', shuttles: 'error' });
+    expect(data.sources).toEqual({ library: 'error', dining: 'error', bray: 'error', shuttles: 'error' });
     expect(data.overrides.carmichael?.[0]?.hours).toBeUndefined();
     expect(data.vehicles).toEqual({});
     expect((await request('/healthz')).status).toBe(503);
