@@ -10,27 +10,27 @@ export const tech: Location[] = [
     description:
       'In-person tech support and the Repair Center (drop-off and pickup Mon–Fri 9 AM – 5 PM). 24/7 phone support at 617-627-3376.',
     hours: [
-      [r('10am', '9pm')], // Sun
-      [r('9am', '9pm')],
-      [r('9am', '9pm')],
-      [r('9am', '9pm')],
-      [r('9am', '9pm')],
+      [r('9am', '11pm')], // Sun
+      [r('9am', '11pm')],
+      [r('9am', '11pm')],
+      [r('9am', '11pm')],
+      [r('9am', '11pm')],
       [r('9am', '5pm')], // Fri
-      [r('10am', '5pm')], // Sat
+      [r('9am', '5pm')], // Sat
     ],
-    holidays: 'closed',
+    // The IT locations page says only that holiday and special hours may vary.
+    holidays: 'unknown',
     breaks: 'unknown',
     overrides: [
       { from: '2026-09-05', to: '2026-09-06', hours: 'closed', note: 'Closed with Tisch Library this weekend' },
     ],
     links: {
-      source: 'https://access.tufts.edu/tts-walk-help-desk-returns-tisch-library-beginning-august-10',
-      schedule: 'https://it.tufts.edu/walk-support-locations',
+      source: 'https://it.tufts.edu/walk-support-locations',
+      schedule: 'https://access.tufts.edu/tts-walk-help-desk-returns-tisch-library-beginning-august-10',
     },
-    sourceConflict: 'Official TTS sources disagree on walk-up hours; confirm with TTS at 617-627-3376.',
-    note: 'The Aug 6, 2026 announcement lists Mon–Thu 9 AM–9 PM, Fri 9 AM–5 PM, Sat 10 AM–5 PM, Sun 10 AM–9 PM. The IT locations page instead lists Sun–Thu 9 AM–11 PM and Fri–Sat 9 AM–5 PM.',
-    verified: '2026-09-07',
-    confidence: 'medium',
+    note: 'Hours follow the TTS walk-up locations page (Sun–Thu 9 AM–11 PM, Fri–Sat 9 AM–5 PM), which notes that holiday and special hours may vary. The Aug 6, 2026 return-to-Tisch announcement listed shorter hours; the locations page is treated as the canonical schedule.',
+    verified: '2026-09-11',
+    confidence: 'high',
   },
   {
     id: 'nolop',
@@ -43,8 +43,8 @@ export const tech: Location[] = [
     holidays: 'regular',
     breaks: 'unknown',
     links: { source: 'https://nolop.org/hours/' },
-    note: 'The hours page still lists summer hours ending Aug 7. It mentions an 11 PM semester close except Saturday, but does not publish a complete fall schedule. Confirm with Nolop.',
-    verified: '2026-09-07',
+    note: 'The hours page (last edited May 26, 2026) still lists summer hours ending Aug 7 and says only that in fall and spring Nolop is "open until 11 PM every day except Saturday"; no opening times or Saturday hours are published. Confirm with Nolop.',
+    verified: '2026-09-11',
     confidence: 'low',
   },
   {
@@ -53,16 +53,16 @@ export const tech: Location[] = [
     category: 'tech',
     building: 'Bray Laboratory room 114, 504 Boston Ave',
     description:
-      'Mechanical engineering shop with the laser cutter (Trotec Speedy 400), hand tools, power tools, mills, and lathes. Safety quiz and zone training required; book machine time at least a day ahead.',
+      'Mechanical engineering shop with the laser cutter (Trotec Speedy 400), hand tools, power tools, mills, and lathes. Safety quiz and zone training required; machine time is booked at least a day ahead, and you can stop by during open shop hours to talk to staff.',
     access: 'appointment',
     hours: 'unknown',
     links: {
       source: 'https://sites.tufts.edu/bray/',
       schedule: 'https://sites.tufts.edu/bray/appointment-request-information/',
     },
-    note: 'Fall 2026 open-shop hours are not posted yet (summer was Mon–Fri 10 AM – 5 PM). Open hours and heat closures are posted on the Bray Lab calendar.',
-    verified: '2026-09-07',
-    confidence: 'low',
+    note: 'Open shop hours and closures come live from the "Open Hours" and "In-Shop Labs" Google calendars embedded on the Bray home page (the Fall 2026 calendar currently shows Mon–Thu 10 AM–8 PM, Fri 10 AM–5 PM, Sat–Sun 12–5 PM through Dec 14, with instance edits). Bray publishes no fixed fall schedule elsewhere, so hours are unknown whenever the calendar feed is unavailable.',
+    verified: '2026-09-11',
+    confidence: 'high',
   },
   {
     id: 'bray-3d-printing',
@@ -81,8 +81,8 @@ export const tech: Location[] = [
     holidays: 'regular',
     breaks: 'regular',
     links: { source: 'https://sites.tufts.edu/bray/3dprintinglab/' },
-    note: 'Hours describe room access, not staffed assistance. Training and help follow the Bray shop calendar; Fall 2026 staffed hours are not yet published.',
-    verified: '2026-09-07',
+    note: 'Hours describe room access, not staffed assistance. Training and help follow the Bray shop calendar (see the machine shop card for live open shop hours).',
+    verified: '2026-09-11',
     confidence: 'high',
   },
   {
@@ -151,10 +151,13 @@ export const tech: Location[] = [
     description:
       'Circuits and electronics labs for ECE/CS students and anyone enrolled in an ECE or CS course. Eligible students have access outside scheduled lab times; contact the department to arrange access.',
     access: 'special',
-    hours: 'unknown',
+    hours: 'varies',
+    availability: 'Available to eligible ECE/CS students outside scheduled labs',
+    holidays: 'regular',
+    breaks: 'regular',
     links: { source: 'https://engineering.tufts.edu/computing/other-facilities' },
-    note: 'No public hours; access outside scheduled lab sessions varies by course. Contact staff@eecs.tufts.edu.',
-    verified: '2026-09-07',
+    note: 'The Engineering computing page lists hours as "Varies": access depends on course enrollment, card access, and the lab schedule, so no fixed hours exist. Contact staff@eecs.tufts.edu.',
+    verified: '2026-09-11',
     confidence: 'high',
   },
   {
@@ -163,21 +166,12 @@ export const tech: Location[] = [
     category: 'tech',
     building: 'Lewis Hall basement, 75 Packard Ave',
     description: 'Student-run studio with pottery, screen printing, and general craft supplies. Free for all Tufts students; drop in during open hours.',
-    hours: [
-      [r('1pm', '5pm')], // Sun
-      [r('5pm', '11pm')],
-      [r('5pm', '11pm')],
-      [r('5pm', '11pm')],
-      [r('5pm', '11pm')],
-      [r('1pm', '5pm')], // Fri
-      [], // Sat
-    ],
-    holidays: 'closed',
-    breaks: 'closed',
-    overrides: [{ from: '2026-09-01', to: '2026-09-13', hours: 'unknown', note: 'Fall opening date is announced on Instagram @tuftscrafts' }],
+    hours: 'unknown',
+    holidays: 'regular',
+    breaks: 'unknown',
     links: { source: 'https://tufts.presence.io/organization/crafts-center' },
-    note: 'Hours are announced on Instagram each semester and vary; the posted pattern is unverified for fall 2026.',
-    verified: '2026-09-03',
+    note: 'No dated Fall 2026 schedule is published. The undated JumboLife listing says 5–11 PM Mon–Thu and 1–5 PM Fri and Sun, the Tufts Maker Network page says 7–11 PM Mon–Thu and 1–5 PM Fri and Sun, and the crafts.center e-list says 7–10 PM and 1–4 PM; hours are announced each semester on Instagram @tuftscrafts.',
+    verified: '2026-09-11',
     confidence: 'low',
   },
 ];

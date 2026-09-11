@@ -1,5 +1,7 @@
 import type { DateOverride, DayHours, Location, PeriodHours, WeekHours } from '../engine/types';
 import { r } from '../engine/format';
+import { addDays, inRange } from '../engine/time';
+import { calendar } from './calendar';
 
 const HOURS_SRC = 'https://dining.tufts.edu/hours/regular-hours-operation';
 const PREO_SRC = 'https://dining.tufts.edu/hours/pre-o-and-orientation-hours';
@@ -18,6 +20,20 @@ const lateNightEvents: DateOverride[] = lateNightDates.map((date) => ({
   confidence: date === '11-24' ? 'medium' : 'high',
   sourceConflict: date === '11-24',
 }));
+
+/** Published Fall 2026 pub nights (https://dining.tufts.edu/hours/pop-pub-hours), all Thursdays 6–10 PM. */
+export const PUB_NIGHTS_FALL_2026 = [
+  '2026-09-10', '2026-09-24', '2026-10-01', '2026-10-15', '2026-10-22', '2026-10-29',
+  '2026-11-05', '2026-11-19', '2026-12-03', '2026-12-10',
+];
+/** Thursdays inside the published range with no pub night. University holidays and breaks already close it. */
+const pubSkippedThursdays: DateOverride[] = [];
+for (let key = PUB_NIGHTS_FALL_2026[0]!; key <= PUB_NIGHTS_FALL_2026[PUB_NIGHTS_FALL_2026.length - 1]!; key = addDays(key, 7)) {
+  const holiday = calendar.holidays.some((h) => h.date === key) || calendar.periods.some((p) => p.kind === 'break' && inRange(key, p.from, p.to));
+  if (!PUB_NIGHTS_FALL_2026.includes(key) && !holiday) {
+    pubSkippedThursdays.push({ from: key, hours: 'closed', note: 'No pub night this Thursday; it is not on the published fall dates' });
+  }
+}
 
 /** Continuous-service dining hall day with Tufts meal periods (breakfast until 11, lunch 11–2, late lunch 2–5, dinner 5–close). */
 function hallDay(open: string, close: string, opts: { brunch?: boolean } = {}): DayHours {
@@ -235,11 +251,15 @@ export const dining: Location[] = [
     hours: [[], [], [], [], [r('6pm', '10pm', 'Pub night')], [], []],
     holidays: 'closed',
     breaks: 'closed',
-    overrides: [{ from: '2026-09-01', to: '2026-09-09', hours: 'unknown', note: 'First pub night of the semester not announced yet' }],
-    links: { source: 'https://dining.tufts.edu/pub' },
-    note: 'Pub nights are a series of events and do not run every Thursday. Check dining.tufts.edu/pub before going.',
-    verified: '2026-09-07',
-    confidence: 'medium',
+    overrides: [
+      { from: '2026-09-01', to: '2026-09-09', hours: 'closed', note: 'Fall pub nights begin Thu Sep 10' },
+      ...pubSkippedThursdays,
+    ],
+    links: { source: 'https://dining.tufts.edu/pub', schedule: 'https://dining.tufts.edu/hours/pop-pub-hours' },
+    validThrough: '2026-12-10',
+    note: 'Pub nights are a series of events, not every Thursday. Tufts Dining lists the Fall 2026 dates: Sep 10 and 24; Oct 1, 15, 22, and 29; Nov 5 and 19; Dec 3 and 10, all 6–10 PM. Spring dates are not announced.',
+    verified: '2026-09-11',
+    confidence: 'high',
   },
   {
     id: 'kindlevan',

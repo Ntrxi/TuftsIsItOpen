@@ -93,7 +93,7 @@ describe('September 7 authoritative schedule audit', () => {
   });
 
   it('keeps unconfirmed pool interpretations and Commons Thanksgiving estimates unknown', () => {
-    expect(loc('hamilton-pool').confidence).toBe('medium');
+    expect(loc('hamilton-pool').confidence).toBe('high');
     expect(loc('hamilton-pool').note).toContain('7 PM–8:15 AM');
     expect(state('hamilton-pool', '2026-09-08', '07:30')).toBe('unknown');
     expect(state('hamilton-pool', '2026-11-24', '07:30')).toBe('unknown');
@@ -131,7 +131,7 @@ it('expires live hours into safe static fallbacks while preserving date conflict
   const now = at('2026-09-07', '12:00');
   const data: LiveData = { fetchedAt: now.toISOString(), vehicles: { 'davis-shuttle': 1 },
     overrides: { dewick: [{ from: '2026-09-07', hours: 'closed', note: 'Live closure' }] },
-    sources: { library: 'ok', dining: 'ok', shuttles: 'ok' } };
+    sources: { library: 'ok', dining: 'ok', bray: 'ok', shuttles: 'ok' } };
   expect(computeStatus(loc('dewick'), calendar, now, data.overrides).state).toBe('closed');
   const later = new Date(+now + HOURS_MAX_AGE_MS);
   const expired = usableLive(data, later);
@@ -143,7 +143,7 @@ it('expires live hours into safe static fallbacks while preserving date conflict
     for (const time of ['10:59', '11:00', '18:59', '19:00']) expect(state('commons', date, time)).toBe('unknown');
   }
   const september = at('2026-09-08', '12:00');
-  const failed = usableLive({ ...data, fetchedAt: september.toISOString(), sources: { library: 'error', dining: 'error', shuttles: 'error' } }, september);
+  const failed = usableLive({ ...data, fetchedAt: september.toISOString(), sources: { library: 'error', dining: 'error', bray: 'error', shuttles: 'error' } }, september);
   expect(computeStatus(loc('tisch-dds'), calendar, september, failed.overrides).state).toBe('open');
   const december = at('2026-12-16', '12:00');
   const stale = usableLive(data, december);
