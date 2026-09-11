@@ -5,21 +5,23 @@ import { updateHTML } from './update';
 import { cardParts, OPEN_STATES, renderClock } from '../render/render';
 import type { State } from '../engine/types';
 
-declare global {
-  interface Window {
-    __LIVE__?: LiveData;
-    __RENDERED_AT__?: string;
-  }
-}
-
 const TICK_MS = 30_000;
 const LIVE_POLL_MS = 120_000;
+/**
+ * The static page ships every card as "Checking…". The first render waits this long for the live
+ * snapshot so that a normal load never flashes the static schedule before the live one replaces it;
+ * a slow or cold Worker falls back to the static schedule and is patched when the snapshot lands.
+ */
+const LIVE_GRACE_MS = 2_500;
 const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
 
 const byId = new Map(locations.map((l) => [l.id, l]));
 const categories = new Set(['all', ...locations.map((l) => l.category)]);
-let live: LiveData = isLiveData(window.__LIVE__) ? window.__LIVE__ : EMPTY_LIVE;
+let live: LiveData = EMPTY_LIVE;
+/** Whether the first live snapshot has arrived (or been given up on); cards stay pending until then. */
+let liveReady = false;
+let graceTimer: ReturnType<typeof setTimeout> | undefined;
 let disconnected = !navigator.onLine;
 let pinned = readPinned();
 let cat = readCategory();
@@ -30,8 +32,8 @@ let openOnly = false;
 
 /**
  * Statuses are computed on the device, so a wrong device clock would show the wrong answer.
- * The server's time (the render timestamp, then the Date header of live responses) corrects it.
- * Either may come from a cache up to ~90 s old, so only a clearly larger skew is applied.
+ * The Date header of live responses corrects it. It may come from a cache up to ~30 s old,
+ * so only a clearly larger skew is applied.
  */
 const SKEW_THRESHOLD_MS = CLOCK_SKEW_TOLERANCE_MS;
 let clockSkewMs = 0;
@@ -98,6 +100,12 @@ const $$ = <T extends Element>(sel: string, root: ParentNode = document): T[] =>
 
 function refresh(): void {
   const at = now();
+  const clock = document.getElementById('clock');
+  if (clock) clock.innerHTML = renderClock(at, calendar);
+  if (!liveReady) {
+    applyFilters();
+    return;
+  }
   const current = usableLive(live, at, disconnected);
   const statuses = computeAll(locations, calendar, at, current.overrides);
   for (const st of statuses) {
@@ -112,8 +120,6 @@ function refresh(): void {
     card.dataset.state = parts.state;
     syncPinButton(card);
   }
-  const clock = document.getElementById('clock');
-  if (clock) clock.innerHTML = renderClock(at, calendar);
   const health = document.getElementById('live-sources');
   const healthText = ` (${Object.entries(current.sources).map(([id, state]) => `${id}: ${state}`).join(', ')})`;
   if (health && health.textContent !== healthText) health.textContent = healthText;
@@ -200,6 +206,14 @@ function applyFilters(): number {
 
 /* Live data --------------------------------------------------------------- */
 
+function markLiveReady(): void {
+  clearTimeout(graceTimer);
+  graceTimer = undefined;
+  if (liveReady) return;
+  liveReady = true;
+  refresh();
+}
+
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let polling = false;
 let lastSuccess = 0;
@@ -222,6 +236,7 @@ async function pollLive(force = false): Promise<void> {
   clearTimeout(pollTimer);
   polling = true;
   lastAttempt = Date.now();
+  if (!liveReady && graceTimer === undefined) graceTimer = setTimeout(markLiveReady, LIVE_GRACE_MS);
   // AbortController rather than AbortSignal.timeout: the latter is missing in older mobile browsers.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -240,14 +255,14 @@ async function pollLive(force = false): Promise<void> {
     clearTimeout(timeout);
   }
   polling = false;
-  refresh();
+  if (liveReady) refresh();
+  else markLiveReady();
   schedulePoll();
 }
 
 /* Wiring ------------------------------------------------------------------ */
 
 function init(): void {
-  noteServerTime(window.__RENDERED_AT__);
   const q = document.getElementById('q') as HTMLInputElement | null;
   const openBtn = document.getElementById('open-only');
   const filters = $$<HTMLButtonElement>('.filter');
@@ -332,15 +347,9 @@ function init(): void {
     refresh();
   });
 
-  // If the server-rendered snapshot is old (cached), pull fresh live data now.
-  const renderedAt = window.__RENDERED_AT__ ? Date.parse(window.__RENDERED_AT__) : 0;
-  const renderAge = now().getTime() - renderedAt;
-  if (!renderedAt || !Number.isFinite(renderAge) || renderAge > 60_000) {
-    void pollLive(true);
-  } else {
-    lastSuccess = Date.now() - Math.max(0, renderAge);
-    schedulePoll();
-  }
+  // The page carries no live data: fetch it now. Offline, the static schedule is all there is.
+  if (!navigator.onLine) markLiveReady();
+  else void pollLive(true);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

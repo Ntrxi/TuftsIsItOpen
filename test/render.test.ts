@@ -36,8 +36,7 @@ describe('footer', () => {
   });
 
   it('reports the oldest and newest check dates, not just the newest', () => {
-    const now = at('2026-09-05', '12:00');
-    const html = renderPage(locations, locations.map((l) => computeStatus(l, calendar, now)), calendar, EMPTY_LIVE, now);
+    const html = renderPage(locations);
     const dates = locations.flatMap((l) => (l.verified ? [l.verified] : [])).sort();
     expect(html).toContain(`checked ${fmtDateRange(dates[0]!, dates[dates.length - 1]!)}`);
   });

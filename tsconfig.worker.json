@@ -4,6 +4,6 @@
     "lib": ["ES2022"],
     "types": ["@cloudflare/workers-types"]
   },
-  "include": ["src/worker", "src/engine", "src/data", "src/render", "test/event-endpoint.test.ts", "test/live-cache.test.ts"],
+  "include": ["src/worker", "src/engine", "src/data", "src/render", "test/event-endpoint.test.ts", "test/live-cache.test.ts", "test/worker-routing.test.ts"],
   "exclude": []
 }

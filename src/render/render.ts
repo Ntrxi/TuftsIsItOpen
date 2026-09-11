@@ -105,6 +105,12 @@ function bodyInner(loc: Location, st: Status): string {
   if (loc.note) parts.push(`<p class="fine">${esc(loc.note)}</p>`);
   if (loc.afterHours) parts.push(`<p class="after"><span class="k">After hours</span>${esc(loc.afterHours)}</p>`);
 
+  parts.push(linksInner(loc));
+  if (loc.verified) parts.push(`<p class="meta">Hours checked ${esc(fmtVerified(loc.verified))}</p>`);
+  return `<div class="col">${left.join('')}</div><div class="col">${parts.join('')}</div>`;
+}
+
+function linksInner(loc: Location): string {
   const links: string[] = [];
   if (loc.links.menu) links.push(`<a href="${esc(loc.links.menu)}" target="_blank" rel="noopener">Menu</a>`);
   if (loc.links.tracker) links.push(`<a href="${esc(loc.links.tracker)}" target="_blank" rel="noopener">Live tracker</a>`);
@@ -112,9 +118,7 @@ function bodyInner(loc: Location, st: Status): string {
     links.push(`<a href="${esc(loc.links.schedule)}" target="_blank" rel="noopener">${loc.category === 'transit' ? 'Schedule' : loc.category === 'health' ? 'Book' : 'Calendar'}</a>`);
   }
   links.push(`<a href="${esc(loc.links.source)}" target="_blank" rel="noopener">Official page</a>`);
-  parts.push(`<div class="links">${links.join('')}</div>`);
-  if (loc.verified) parts.push(`<p class="meta">Hours checked ${esc(fmtVerified(loc.verified))}</p>`);
-  return `<div class="col">${left.join('')}</div><div class="col">${parts.join('')}</div>`;
+  return `<div class="links">${links.join('')}</div>`;
 }
 
 function fmtVerified(key: string): string {
@@ -140,8 +144,38 @@ export function renderCard(loc: Location, st: Status, live: LiveData): string {
 </details>`;
 }
 
-export function renderGroups(locations: Location[], statuses: Status[], live: LiveData): string {
-  const byId = new Map(statuses.map((s) => [s.id, s]));
+/**
+ * A card with no status yet: the static page ships every card like this, and the browser fills in the
+ * status, today's hours, and the week table once it has computed them. The shape matches renderCard so
+ * the client-side patch touches only the parts that change.
+ */
+export function renderPendingCard(loc: Location): string {
+  const search = `${loc.name} ${loc.building ?? ''} ${CATEGORY_META[loc.category].label}`.toLowerCase();
+  const left: string[] = [];
+  if (loc.description) left.push(`<p class="desc">${esc(loc.description)}</p>`);
+  if (loc.building) left.push(`<p class="where">${esc(loc.building)}</p>`);
+  if (loc.transit?.stops?.length) left.push(`<p class="stops"><span class="k">Stops</span>${esc(loc.transit.stops.join(' → '))}</p>`);
+  const right: string[] = [];
+  if (loc.note) right.push(`<p class="fine">${esc(loc.note)}</p>`);
+  if (loc.afterHours) right.push(`<p class="after"><span class="k">After hours</span>${esc(loc.afterHours)}</p>`);
+  right.push(linksInner(loc));
+  if (loc.verified) right.push(`<p class="meta">Hours checked ${esc(fmtVerified(loc.verified))}</p>`);
+  return `<details class="card" id="loc-${esc(loc.id)}" data-id="${esc(loc.id)}" data-cat="${loc.category}" data-state="pending" data-search="${esc(search)}">
+  <summary class="card-head">
+    <span class="dot" aria-hidden="true"></span>
+    <span class="card-main">
+      <span class="card-name">${esc(loc.name)}</span>
+      <span class="card-status"><span class="state">Checking…</span></span>
+    </span>
+    <span class="chev" aria-hidden="true"></span>
+    <button class="pin" type="button" aria-label="Pin ${esc(loc.name)} to top" aria-pressed="false" title="Pin to top">
+      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
+    </button></summary>
+  <div class="card-body"><div class="col">${left.join('')}</div><div class="col">${right.join('')}</div></div>
+</details>`;
+}
+
+export function renderPendingGroups(locations: Location[]): string {
   const groups: string[] = [];
   groups.push(`<section class="group" data-group="pinned" hidden><h2><span class="icon">★</span>Pinned</h2><div class="cards"></div></section>`);
   for (const cat of CATEGORY_ORDER as Category[]) {
@@ -150,7 +184,7 @@ export function renderGroups(locations: Location[], statuses: Status[], live: Li
     const meta = CATEGORY_META[cat];
     groups.push(
       `<section class="group" data-group="${cat}"><h2><span class="icon" aria-hidden="true">${meta.icon}</span>${esc(meta.label)}</h2><div class="cards">${locs
-        .map((l) => renderCard(l, byId.get(l.id)!, live))
+        .map(renderPendingCard)
         .join('')}</div></section>`,
     );
   }

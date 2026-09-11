@@ -13,5 +13,5 @@
     "isolatedModules": true
   },
   "include": ["src/client", "src/engine", "src/data", "src/render", "test", "scripts"],
-  "exclude": ["test/event-endpoint.test.ts", "test/live-cache.test.ts"]
+  "exclude": ["test/event-endpoint.test.ts", "test/live-cache.test.ts", "test/worker-routing.test.ts"]
 }

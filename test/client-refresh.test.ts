@@ -1,9 +1,8 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
 import { updateHTML } from '../src/client/update';
-import { locations, calendar } from '../src/data';
-import { computeStatus } from '../src/engine/status';
-import { renderCard } from '../src/render/render';
+import { locations } from '../src/data';
+import { renderPendingCard } from '../src/render/render';
 import type { LiveData } from '../src/engine/live';
 
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); document.body.innerHTML = ''; });
@@ -39,14 +38,14 @@ it('retains recent data through failures, expires by age, and recovers without A
   vi.setSystemTime(now);
   const data: LiveData = { fetchedAt: now.toISOString(), sources: { library: 'ok', dining: 'ok', shuttles: 'ok' },
     overrides: { carmichael: [{ from: '2026-09-10', hours: 'closed', note: 'Feed closure' }] }, vehicles: { 'davis-shuttle': 3 } };
-  window.__LIVE__ = data;
-  window.__RENDERED_AT__ = now.toISOString();
-  document.body.innerHTML = locations.filter((l) => ['carmichael', 'davis-shuttle'].includes(l.id)).map((l) => renderCard(l, computeStatus(l, calendar, now, data.overrides), data)).join('');
+  document.body.innerHTML = locations.filter((l) => ['carmichael', 'davis-shuttle'].includes(l.id)).map(renderPendingCard).join('');
   vi.stubGlobal('AbortSignal', { timeout: undefined });
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 503 })));
+  vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify(data))));
   await import('../src/client/main');
   document.dispatchEvent(new Event('DOMContentLoaded'));
+  await vi.advanceTimersByTimeAsync(0);
   expect(document.body.textContent).toContain('3 buses live');
+  vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 503 }));
   window.dispatchEvent(new Event('offline'));
   expect(document.body.textContent).toContain('3 buses live');
   // Polling pauses while offline and resumes on reconnect (jsdom never flips navigator.onLine itself).

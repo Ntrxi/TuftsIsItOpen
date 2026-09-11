@@ -1,0 +1,10 @@
+# Headers for static assets (the homepage and the client bundle). The Worker sets its own
+# headers for /api/* responses. Cloudflare adds ETag and CF-Cache-Status itself.
+/*
+  X-Content-Type-Options: nosniff
+  Referrer-Policy: strict-origin-when-cross-origin
+
+# The homepage only changes on deploy; keep the same short freshness window the
+# server-rendered page used so a deploy still reaches browsers within a minute.
+/
+  Cache-Control: public, max-age=30, stale-while-revalidate=60

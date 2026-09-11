@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { calendar, locations } from '../src/data';
-import { computeAll } from '../src/engine/status';
+import { locations } from '../src/data';
 import type { LiveData } from '../src/engine/live';
 import { renderPage } from '../src/render/page';
 
@@ -17,14 +16,14 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 
-async function setup({ hidden = false, offline = false, age = 0, storage = {} as Record<string, unknown> } = {}) {
+async function setup({ hidden = false, offline = false, storage = {} as Record<string, unknown>, live = async () => new Response(JSON.stringify(snapshot())) } = {}) {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T16:00:00Z'));
   vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(hidden ? 'hidden' : 'visible');
   const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(!offline);
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(snapshot()))));
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(live));
   const beacon = vi.fn();
   vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { sendBeacon: beacon }));
   for (const target of [document, window]) {
@@ -34,9 +33,7 @@ async function setup({ hidden = false, offline = false, age = 0, storage = {} as
       listeners.push(() => target.removeEventListener(type, listener, options));
     });
   }
-  window.__LIVE__ = snapshot();
-  window.__RENDERED_AT__ = new Date(Date.now() - age).toISOString();
-  document.documentElement.innerHTML = renderPage(locations, computeAll(locations, calendar, new Date()), calendar, snapshot(), new Date(), { beaconToken: 'test-token' });
+  document.documentElement.innerHTML = renderPage(locations, { beaconToken: 'test-token' });
   HTMLElement.prototype.scrollIntoView = vi.fn();
   for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, JSON.stringify(value));
   await import('../src/client/main');
@@ -77,29 +74,33 @@ function snapshot(): LiveData {
   return { fetchedAt: new Date().toISOString(), overrides: {}, vehicles: {}, sources: { library: 'ok', dining: 'ok', shuttles: 'ok' } };
 }
 
-it('polls visible tabs every two minutes and pauses hidden and offline tabs', async () => {
+it('fetches live data on load, then polls visible tabs every two minutes and pauses hidden and offline tabs', async () => {
   const client = await setup();
-  await vi.advanceTimersByTimeAsync(120_000);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  client.visibility('hidden');
-  await vi.advanceTimersByTimeAsync(600_000);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  client.visibility('visible');
   await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(119_999);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
   expect(fetch).toHaveBeenCalledTimes(2);
   client.visibility('hidden');
-  client.visibility('visible');
-  expect(fetch).toHaveBeenCalledTimes(2);
-  client.online(false);
   await vi.advanceTimersByTimeAsync(600_000);
   expect(fetch).toHaveBeenCalledTimes(2);
-  client.online(true);
+  client.visibility('visible');
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(3);
+  client.visibility('hidden');
+  client.visibility('visible');
+  expect(fetch).toHaveBeenCalledTimes(3);
+  client.online(false);
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  client.online(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });
 
-it('defers old-page startup while hidden/offline and refreshes on return', async () => {
-  const client = await setup({ hidden: true, offline: true, age: 90_000 });
+it('defers startup while hidden/offline and fetches on return', async () => {
+  const client = await setup({ hidden: true, offline: true });
   await vi.advanceTimersByTimeAsync(120_000);
   client.online(true);
   expect(fetch).not.toHaveBeenCalled();
@@ -108,8 +109,52 @@ it('defers old-page startup while hidden/offline and refreshes on return', async
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('refreshes old pages immediately and coalesces triggers during a request', async () => {
-  const client = await setup({ age: 90_000 });
+function closure(): LiveData {
+  return { ...snapshot(), overrides: { 'tisch-library': [{ from: '2026-09-10', hours: 'closed', note: 'Feed closure' }] } };
+}
+
+it('keeps cards pending until the first live snapshot, then renders from it without a static flash', async () => {
+  let resolve!: (response: Response) => void;
+  await setup({ live: () => new Promise<Response>((done) => { resolve = done; }) });
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('pending');
+  expect(card.textContent).toContain('Checking…');
+  expect(document.getElementById('clock')!.textContent).toContain('12:00 PM');
+  expect(document.getElementById('live-sources')!.textContent).toBe('');
+  await vi.advanceTimersByTimeAsync(2_000);
+  expect(card.dataset.state).toBe('pending');
+  resolve(new Response(JSON.stringify(closure())));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(card.dataset.state).toBe('closed');
+  expect(card.textContent).toContain('Feed closure');
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
+  expect(document.body.textContent).not.toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: ok');
+});
+
+it('falls back to the static schedule when the live snapshot is slow, then patches it in', async () => {
+  let resolve!: (response: Response) => void;
+  await setup({ live: () => new Promise<Response>((done) => { resolve = done; }) });
+  await vi.advanceTimersByTimeAsync(2_500);
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  resolve(new Response(JSON.stringify(closure())));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(card.dataset.state).toBe('closed');
+  expect(card.textContent).not.toContain('Live hours unavailable');
+});
+
+it('renders the static schedule at once when loaded offline', async () => {
+  await setup({ offline: true });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
+  expect(document.querySelector<HTMLElement>('#loc-tisch-library')!.dataset.state).toBe('open');
+});
+
+it('coalesces triggers during a request', async () => {
+  const client = await setup();
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   let resolve!: (response: Response) => void;
@@ -133,9 +178,9 @@ it('waits two minutes after a failed poll even when visibility changes', async (
   client.visibility('hidden');
   client.visibility('visible');
   await vi.advanceTimersByTimeAsync(119_999);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(1);
   expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('preserves interactions and the basic beacon without custom tracking requests', async () => {
@@ -161,6 +206,7 @@ it('preserves interactions and the basic beacon without custom tracking requests
   card.open = true;
   await vi.advanceTimersByTimeAsync(1_000);
   expect(client.beacon).not.toHaveBeenCalled();
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(fetch).mock.calls.every(([url]) => url === '/api/live')).toBe(true);
   expect(document.querySelector('script[data-cf-beacon]')!.getAttribute('data-cf-beacon')).toContain('test-token');
 });
