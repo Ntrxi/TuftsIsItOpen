@@ -16,7 +16,7 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 
-async function setup({ hidden = false, offline = false, storage = {} as Record<string, unknown>, live = async () => new Response(JSON.stringify(snapshot())) } = {}) {
+async function setup({ hidden = false, offline = false, storage = {} as Record<string, unknown>, live = (async () => new Response(JSON.stringify(snapshot()))) as typeof fetch } = {}) {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T16:00:00Z'));
@@ -113,44 +113,79 @@ function closure(): LiveData {
   return { ...snapshot(), overrides: { 'tisch-library': [{ from: '2026-09-10', hours: 'closed', note: 'Feed closure' }] } };
 }
 
-it('keeps cards pending until the first live snapshot, then renders from it without a static flash', async () => {
+/** A live request that never answers on its own; it rejects only when the client aborts it. */
+function hanging(): { live: typeof fetch; resolve: (response: Response) => void } {
   let resolve!: (response: Response) => void;
-  await setup({ live: () => new Promise<Response>((done) => { resolve = done; }) });
+  const live = ((_url: unknown, init?: RequestInit) => new Promise<Response>((done, reject) => {
+    resolve = done;
+    init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+  })) as typeof fetch;
+  return { live, resolve: (response) => resolve(response) };
+}
+
+it('renders scheduled statuses at once, then patches live overrides in when the snapshot arrives', async () => {
+  const request = hanging();
+  await setup({ live: request.live });
+  // No timers have run: the scheduled hours are already on screen while the live request is in flight.
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
   const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
-  expect(card.dataset.state).toBe('pending');
-  expect(card.textContent).toContain('Checking…');
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Closes');
+  expect(card.querySelectorAll('.week tr').length).toBeGreaterThan(0);
+  expect(document.body.textContent).not.toContain('Checking…');
+  expect(document.body.textContent).not.toContain('Live hours unavailable');
   expect(document.getElementById('clock')!.textContent).toContain('12:00 PM');
-  expect(document.getElementById('live-sources')!.textContent).toBe('');
-  await vi.advanceTimersByTimeAsync(2_000);
-  expect(card.dataset.state).toBe('pending');
-  resolve(new Response(JSON.stringify(closure())));
+  expect(document.getElementById('live-sources')!.textContent).toBe(' (loading live feeds…)');
+  request.resolve(new Response(JSON.stringify(closure())));
   await vi.advanceTimersByTimeAsync(0);
   expect(card.dataset.state).toBe('closed');
   expect(card.textContent).toContain('Feed closure');
-  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
   expect(document.body.textContent).not.toContain('Live hours unavailable');
   expect(document.getElementById('live-sources')!.textContent).toContain('library: ok');
 });
 
-it('falls back to the static schedule when the live snapshot is slow, then patches it in', async () => {
-  let resolve!: (response: Response) => void;
-  await setup({ live: () => new Promise<Response>((done) => { resolve = done; }) });
-  await vi.advanceTimersByTimeAsync(2_500);
+it('keeps scheduled statuses usable when the live request is slow, then times out', async () => {
+  await setup({ live: hanging().live });
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  await vi.advanceTimersByTimeAsync(9_999);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).not.toContain('Live hours unavailable');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: error');
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('keeps scheduled statuses when the live request fails outright', async () => {
+  await setup({ live: async () => new Response('{}', { status: 503 }) });
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('open');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  expect(document.querySelector<HTMLElement>('#loc-dewick')!.dataset.state).toBe('open');
+});
+
+it('renders the scheduled statuses at once when loaded offline, without requesting live data', async () => {
+  await setup({ offline: true });
+  expect(fetch).not.toHaveBeenCalled();
   expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
   const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
   expect(card.dataset.state).toBe('open');
   expect(card.textContent).toContain('Live hours unavailable');
-  resolve(new Response(JSON.stringify(closure())));
-  await vi.advanceTimersByTimeAsync(0);
-  expect(card.dataset.state).toBe('closed');
-  expect(card.textContent).not.toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: error');
 });
 
-it('renders the static schedule at once when loaded offline', async () => {
-  await setup({ offline: true });
+it('renders scheduled statuses in a hidden tab and fetches live data once it is shown', async () => {
+  const client = await setup({ hidden: true });
   expect(fetch).not.toHaveBeenCalled();
-  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
   expect(document.querySelector<HTMLElement>('#loc-tisch-library')!.dataset.state).toBe('open');
+  client.visibility('visible');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(1);
 });
 
 it('coalesces triggers during a request', async () => {

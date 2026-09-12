@@ -80,13 +80,20 @@ function markStale(sources: LiveData['sources']): LiveData['sources'] {
   return out;
 }
 
+/**
+ * API responses may sit in the browser cache for as long as the Worker itself serves a snapshot without
+ * refreshing it (LIVE_FRESH_MS): a reload or a second tab within that window costs no Worker request and
+ * sees the same data it would have been served anyway.
+ */
+const API_CACHE_CONTROL = `public, max-age=${LIVE_FRESH_MS / 1000}`;
+
 function json(body: unknown, init: ResponseInit = {}): Response {
   return new Response(JSON.stringify(body), {
     ...init,
     headers: {
       'content-type': 'application/json; charset=utf-8',
       'access-control-allow-origin': '*',
-      'cache-control': 'public, max-age=30',
+      'cache-control': API_CACHE_CONTROL,
       ...(init.headers ?? {}),
     },
   });

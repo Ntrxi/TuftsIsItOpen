@@ -7,21 +7,18 @@ import type { State } from '../engine/types';
 
 const TICK_MS = 30_000;
 const LIVE_POLL_MS = 120_000;
-/**
- * The static page ships every card as "Checking…". The first render waits this long for the live
- * snapshot so that a normal load never flashes the static schedule before the live one replaces it;
- * a slow or cold Worker falls back to the static schedule and is patched when the snapshot lands.
- */
-const LIVE_GRACE_MS = 2_500;
 const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
 
 const byId = new Map(locations.map((l) => [l.id, l]));
 const categories = new Set(['all', ...locations.map((l) => l.category)]);
 let live: LiveData = EMPTY_LIVE;
-/** Whether the first live snapshot has arrived (or been given up on); cards stay pending until then. */
-let liveReady = false;
-let graceTimer: ReturnType<typeof setTimeout> | undefined;
+/**
+ * False until the first /api/live request has succeeded or failed. The static page carries no live
+ * data, so the first render uses the scheduled hours alone; the "live hours unavailable" annotations
+ * only apply once a request has actually failed, not while the first one is still in flight.
+ */
+let liveSettled = false;
 let disconnected = !navigator.onLine;
 let pinned = readPinned();
 let cat = readCategory();
@@ -32,7 +29,7 @@ let openOnly = false;
 
 /**
  * Statuses are computed on the device, so a wrong device clock would show the wrong answer.
- * The Date header of live responses corrects it. It may come from a cache up to ~30 s old,
+ * The Date header of live responses corrects it. It may come from a cache up to ~60 s old,
  * so only a clearly larger skew is applied.
  */
 const SKEW_THRESHOLD_MS = CLOCK_SKEW_TOLERANCE_MS;
@@ -102,11 +99,7 @@ function refresh(): void {
   const at = now();
   const clock = document.getElementById('clock');
   if (clock) clock.innerHTML = renderClock(at, calendar);
-  if (!liveReady) {
-    applyFilters();
-    return;
-  }
-  const current = usableLive(live, at, disconnected);
+  const current = liveSettled ? usableLive(live, at, disconnected) : EMPTY_LIVE;
   const statuses = computeAll(locations, calendar, at, current.overrides);
   for (const st of statuses) {
     const card = document.getElementById(`loc-${st.id}`);
@@ -121,7 +114,7 @@ function refresh(): void {
     syncPinButton(card);
   }
   const health = document.getElementById('live-sources');
-  const healthText = ` (${Object.entries(current.sources).map(([id, state]) => `${id}: ${state}`).join(', ')})`;
+  const healthText = liveSettled ? ` (${Object.entries(current.sources).map(([id, state]) => `${id}: ${state}`).join(', ')})` : ' (loading live feeds…)';
   if (health && health.textContent !== healthText) health.textContent = healthText;
   applyFilters();
 }
@@ -206,14 +199,6 @@ function applyFilters(): number {
 
 /* Live data --------------------------------------------------------------- */
 
-function markLiveReady(): void {
-  clearTimeout(graceTimer);
-  graceTimer = undefined;
-  if (liveReady) return;
-  liveReady = true;
-  refresh();
-}
-
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 let polling = false;
 let lastSuccess = 0;
@@ -236,7 +221,6 @@ async function pollLive(force = false): Promise<void> {
   clearTimeout(pollTimer);
   polling = true;
   lastAttempt = Date.now();
-  if (!liveReady && graceTimer === undefined) graceTimer = setTimeout(markLiveReady, LIVE_GRACE_MS);
   // AbortController rather than AbortSignal.timeout: the latter is missing in older mobile browsers.
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10_000);
@@ -255,8 +239,8 @@ async function pollLive(force = false): Promise<void> {
     clearTimeout(timeout);
   }
   polling = false;
-  if (liveReady) refresh();
-  else markLiveReady();
+  liveSettled = true;
+  refresh();
   schedulePoll();
 }
 
@@ -326,6 +310,9 @@ function init(): void {
     }
   }
 
+  // Scheduled hours render at once from the bundled dataset; live overrides are patched in below.
+  // Offline, the scheduled hours are all there is, so the live annotations apply straight away.
+  liveSettled = !navigator.onLine;
   placePinned();
   refresh();
 
@@ -347,9 +334,8 @@ function init(): void {
     refresh();
   });
 
-  // The page carries no live data: fetch it now. Offline, the static schedule is all there is.
-  if (!navigator.onLine) markLiveReady();
-  else void pollLive(true);
+  // Fetch the live snapshot in parallel with the first render.
+  if (navigator.onLine) void pollLive(true);
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);

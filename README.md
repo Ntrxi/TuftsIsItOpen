@@ -20,7 +20,7 @@ public/       static assets (icons, manifest, _headers, built index.html/app.js/
 test/         engine, feed, rendering, and data-integrity tests
 ```
 
-**Request flow.** `/` is `public/index.html`, served by Cloudflare's static assets layer without invoking the Worker (as are the icons and the bundle). The page ships every card as *Checking…* with its description and official links; `app.js` fetches `/api/live`, computes every status on the device, and patches the cards in place. The first render waits up to 2.5 s for that snapshot so a normal load never flashes the static schedule before live closures replace it; a slower response falls back to the static schedule and is patched when it lands. Only `/api/*` and `/healthz` reach the Worker. `public/_headers` sets the cache and security headers for assets.
+**Request flow.** `/` is `public/index.html`, served by Cloudflare's static assets layer without invoking the Worker (as are the icons and the bundle). The page ships every card as *Checking…* with its description and official links; as soon as `app.js` runs it computes every scheduled status on the device from the bundled dataset, and in parallel fetches `/api/live` and patches live closures and vehicle counts into the cards when the snapshot lands. A failed or slow live request leaves the scheduled statuses in place and annotates them once the request has actually failed. Only `/api/*` and `/healthz` reach the Worker. `public/_headers` sets the cache and security headers for assets.
 
 The engine resolves live overrides, dated exceptions, holidays, academic periods, and regular weekly hours in that order. Overnight and split intervals retain their campus service date. Missing, conflicting, or unverified hours resolve to an explicit unknown state rather than a guess.
 
@@ -48,7 +48,7 @@ npm run deploy
 
 Wrangler's checked-in build hook builds the client bundle before direct or connected deployment. `GET /healthz` reports uncached provider health, and provider failures emit structured `live_feed_failure` logs.
 
-Only `/api/*` and `/healthz` count as Worker requests: each page view costs one `/api/live` request, and static asset requests (including the homepage) do not draw on the Worker allowance.
+Only `/api/*` and `/healthz` count as Worker requests: each page view costs one `/api/live` request, and static asset requests (including the homepage) do not draw on the Worker allowance. `/api/live` is browser-cacheable for 60 seconds, the same window in which the Worker serves one snapshot without refreshing it, so reloads and extra tabs inside that window cost nothing. Visible tabs poll every two minutes, which keeps shuttle counts inside their three-minute expiry; a longer interval would let them lapse between polls, and hidden or offline tabs do not poll at all.
 
 Cloudflare Web Analytics is embedded in `public/index.html` at build time only when `CF_BEACON_TOKEN` in `wrangler.jsonc` is non-empty; `npm run dev` and `npm start` disable it (Wrangler runs the build with `WRANGLER_COMMAND=dev`, which selects the `dev` environment's empty token; `CLOUDFLARE_ENV` selects an environment explicitly). Configure the token with the manual Web Analytics snippet, redeploy, and keep automatic injection disabled to avoid duplicate beacons.
 

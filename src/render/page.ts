@@ -13,7 +13,7 @@ export interface PageOptions {
 /**
  * The static homepage, generated once at build time and served as an asset without invoking the Worker.
  * Nothing time-dependent is baked in: cards render in a pending state and the browser bundle computes
- * statuses from the same dataset once it has fetched the live snapshot from /api/live.
+ * statuses from the same dataset as soon as it runs, then patches in the live snapshot from /api/live.
  */
 export function renderPage(locations: Location[], opts: PageOptions = {}): string {
   // Cloudflare Web Analytics beacon (cookie-less, no PII). The attribute is double-quoted, so esc() keeps it safe.
@@ -41,7 +41,6 @@ export function renderPage(locations: Location[], opts: PageOptions = {}): strin
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT@0,9..144,600..900,0..100;1,9..144,600..900,0..100&display=swap">
 <link rel="stylesheet" href="/app.css">
-<link rel="preload" href="/api/live" as="fetch" crossorigin="anonymous">
 <script type="module" src="/app.js"></script>
 </head>
 <body>
