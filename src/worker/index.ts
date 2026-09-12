@@ -99,12 +99,21 @@ function json(body: unknown, init: ResponseInit = {}): Response {
   });
 }
 
-function parseAt(url: URL): Date {
-  const at = url.searchParams.get('at');
-  if (!at) return new Date();
+/**
+ * Resolve the optional `at` query parameter: absent means now; a value `Date` can parse means that
+ * instant; anything else (including an empty string) is `null`, and the route answers 400 rather than
+ * silently evaluating the current time under a timestamp the caller never asked for.
+ */
+function parseAt(url: URL): Date | null {
+  if (!url.searchParams.has('at')) return new Date();
+  const at = url.searchParams.get('at')!.trim();
+  if (!at) return null;
   const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? new Date() : d;
+  return Number.isNaN(d.getTime()) ? null : d;
 }
+
+const invalidAt = (): Response =>
+  json({ error: "Invalid 'at' parameter; expected an ISO-8601 timestamp" }, { status: 400, headers: { 'cache-control': 'no-store' } });
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
@@ -120,6 +129,7 @@ export default {
 
     if (path === '/api/status') {
       const at = parseAt(url);
+      if (!at) return invalidAt();
       const live = await getLive(ctx);
       const statuses = computeAll(locations, calendar, at, live.overrides);
       const byId = new Map(locations.map((l) => [l.id, l]));
