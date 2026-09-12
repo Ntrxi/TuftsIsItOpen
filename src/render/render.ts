@@ -49,12 +49,22 @@ function chips(loc: Location, st: Status): string {
   return out.join('');
 }
 
+/**
+ * The shuttle count chip. Counts are only called "live" while the shuttle source is fresh (`ok`);
+ * a retained count from a stale snapshot (refresh in flight, or the device is offline) is shown as
+ * the last count seen so old data is never presented as current tracking.
+ */
+export function vehicleChip(vehicles: number | undefined, source: LiveData['sources'][string] | undefined): string {
+  if (vehicles === undefined || (source !== 'ok' && source !== 'stale')) return '';
+  const buses = vehicles === 0 ? 'no buses' : vehicles === 1 ? '1 bus' : `${vehicles} buses`;
+  if (source === 'ok') {
+    return `<span class="chip chip-live" title="Vehicles reporting on the live tracker">${vehicles === 0 ? 'No bus tracking' : `${buses} live`}</span>`;
+  }
+  return `<span class="chip chip-stale" title="Last count from the live tracker; the feed has not refreshed recently">Last seen: ${buses}</span>`;
+}
+
 function headInner(loc: Location, st: Status, live: LiveData): string {
-  const vehicles = live.vehicles[loc.id];
-  const liveChip =
-    loc.category === 'transit' && vehicles !== undefined
-      ? `<span class="chip chip-live" title="Vehicles reporting on the live tracker">${vehicles === 0 ? 'No bus tracking' : vehicles === 1 ? '1 bus live' : `${vehicles} buses live`}</span>`
-      : '';
+  const liveChip = loc.category === 'transit' ? vehicleChip(live.vehicles[loc.id], live.sources.shuttles) : '';
   const period = st.period ? `<span class="period">${esc(st.period)}${st.periodEnds ? ` until ${esc(st.periodEnds)}` : ''}</span>` : '';
   const departures =
     st.nextDepartures && (st.state === 'running' || st.state === 'opening_soon')

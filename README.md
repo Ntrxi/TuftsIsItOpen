@@ -24,7 +24,7 @@ test/         engine, feed, rendering, and data-integrity tests
 
 The engine resolves live overrides, dated exceptions, holidays, academic periods, and regular weekly hours in that order. Overnight and split intervals retain their campus service date. Missing, conflicting, or unverified hours resolve to an explicit unknown state rather than a guess.
 
-Live data comes from LibCal, Nutrislice, Bray Lab's public calendars, and Passio GO. Providers are best-effort: verified static schedules remain available when appropriate, while affected live data expires or becomes unknown on failure. Current unresolved source decisions and timing concerns are recorded in [`docs/maintenance.md`](docs/maintenance.md).
+Live data comes from LibCal, Nutrislice, Bray Lab's public calendars, and Passio GO. Providers are best-effort: verified static schedules remain available when appropriate, while affected live data expires or becomes unknown on failure. Shuttle vehicle counts are labelled *live* only while the shuttle source is fresh; when the snapshot is stale (a refresh is pending, or the device is offline) the retained count is shown as *Last seen* until it expires three minutes after it was fetched, and a provider failure removes it outright. Current unresolved source decisions and timing concerns are recorded in [`docs/maintenance.md`](docs/maintenance.md).
 
 ## Develop
 

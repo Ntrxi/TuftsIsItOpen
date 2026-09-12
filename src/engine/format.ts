@@ -77,7 +77,19 @@ export function sameHours(a: DayHours, b: DayHours): boolean {
   });
 }
 
-/** Parse "7:00", "7:30am", "21:15", "9pm" into minutes. Used by data files for readability. */
+/**
+ * Largest unsuffixed clock value accepted by `t()`, in minutes. Schedule minutes may run into
+ * the following campus day (validation caps interval ends at 2880 minutes = 48:00), so
+ * post-midnight service such as "24:05" or "25:30" stays parseable and "48:00" itself is the
+ * inclusive ceiling.
+ */
+const MAX_EXTENDED_MINUTES = 48 * 60;
+
+/**
+ * Parse "7:00", "7:30am", "21:15", "9pm" into minutes. Used by data files for readability.
+ * Minutes must be 00–59. With an am/pm suffix the hour must be 1–12; without one it may
+ * run past midnight up to and including 48:00 for post-midnight service. Anything else throws.
+ */
 export function t(text: string): number {
   const s = text.trim().toLowerCase();
   const match = /^(\d{1,2})(?::(\d{2}))?\s*(am|pm)?$/.exec(s);
@@ -85,9 +97,17 @@ export function t(text: string): number {
   let h = Number(match[1]);
   const min = Number(match[2] ?? '0');
   const ap = match[3];
-  if (ap === 'pm' && h < 12) h += 12;
-  if (ap === 'am' && h === 12) h = 0;
-  return h * 60 + min;
+  if (min > 59) throw new Error(`Bad time: ${text} (minutes must be 00-59)`);
+  if (ap) {
+    if (h < 1 || h > 12) throw new Error(`Bad time: ${text} (hour must be 1-12 with am/pm)`);
+    if (ap === 'pm' && h < 12) h += 12;
+    if (ap === 'am' && h === 12) h = 0;
+  }
+  const total = h * 60 + min;
+  if (total > MAX_EXTENDED_MINUTES) {
+    throw new Error(`Bad time: ${text} (unsuffixed times must not exceed 48:00)`);
+  }
+  return total;
 }
 
 /** Interval builder: r('7am','9pm','Dinner'). End earlier than start means overnight. */
