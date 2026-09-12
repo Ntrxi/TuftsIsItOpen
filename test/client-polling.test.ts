@@ -1,7 +1,6 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from 'vitest';
-import { calendar, locations } from '../src/data';
-import { computeAll } from '../src/engine/status';
+import { locations } from '../src/data';
 import type { LiveData } from '../src/engine/live';
 import { renderPage } from '../src/render/page';
 
@@ -17,14 +16,14 @@ afterEach(() => {
   history.replaceState(null, '', '/');
 });
 
-async function setup({ hidden = false, offline = false, age = 0, storage = {} as Record<string, unknown> } = {}) {
+async function setup({ hidden = false, offline = false, storage = {} as Record<string, unknown>, live = (async () => new Response(JSON.stringify(snapshot()))) as typeof fetch } = {}) {
   vi.resetModules();
   vi.useFakeTimers();
   vi.setSystemTime(new Date('2026-09-10T16:00:00Z'));
   vi.spyOn(document, 'readyState', 'get').mockReturnValue('complete');
   const visibility = vi.spyOn(document, 'visibilityState', 'get').mockReturnValue(hidden ? 'hidden' : 'visible');
   const online = vi.spyOn(navigator, 'onLine', 'get').mockReturnValue(!offline);
-  vi.stubGlobal('fetch', vi.fn().mockImplementation(async () => new Response(JSON.stringify(snapshot()))));
+  vi.stubGlobal('fetch', vi.fn().mockImplementation(live));
   const beacon = vi.fn();
   vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { sendBeacon: beacon }));
   for (const target of [document, window]) {
@@ -34,9 +33,7 @@ async function setup({ hidden = false, offline = false, age = 0, storage = {} as
       listeners.push(() => target.removeEventListener(type, listener, options));
     });
   }
-  window.__LIVE__ = snapshot();
-  window.__RENDERED_AT__ = new Date(Date.now() - age).toISOString();
-  document.documentElement.innerHTML = renderPage(locations, computeAll(locations, calendar, new Date()), calendar, snapshot(), new Date(), { beaconToken: 'test-token' });
+  document.documentElement.innerHTML = renderPage(locations, { beaconToken: 'test-token' });
   HTMLElement.prototype.scrollIntoView = vi.fn();
   for (const [key, value] of Object.entries(storage)) localStorage.setItem(key, JSON.stringify(value));
   await import('../src/client/main');
@@ -77,29 +74,33 @@ function snapshot(): LiveData {
   return { fetchedAt: new Date().toISOString(), overrides: {}, vehicles: {}, sources: { library: 'ok', dining: 'ok', bray: 'ok', shuttles: 'ok' } };
 }
 
-it('polls visible tabs every two minutes and pauses hidden and offline tabs', async () => {
+it('fetches live data on load, then polls visible tabs every two minutes and pauses hidden and offline tabs', async () => {
   const client = await setup();
-  await vi.advanceTimersByTimeAsync(120_000);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  client.visibility('hidden');
-  await vi.advanceTimersByTimeAsync(600_000);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  client.visibility('visible');
   await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(119_999);
+  expect(fetch).toHaveBeenCalledTimes(1);
+  await vi.advanceTimersByTimeAsync(1);
   expect(fetch).toHaveBeenCalledTimes(2);
   client.visibility('hidden');
-  client.visibility('visible');
-  expect(fetch).toHaveBeenCalledTimes(2);
-  client.online(false);
   await vi.advanceTimersByTimeAsync(600_000);
   expect(fetch).toHaveBeenCalledTimes(2);
-  client.online(true);
+  client.visibility('visible');
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(3);
+  client.visibility('hidden');
+  client.visibility('visible');
+  expect(fetch).toHaveBeenCalledTimes(3);
+  client.online(false);
+  await vi.advanceTimersByTimeAsync(600_000);
+  expect(fetch).toHaveBeenCalledTimes(3);
+  client.online(true);
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(4);
 });
 
-it('defers old-page startup while hidden/offline and refreshes on return', async () => {
-  const client = await setup({ hidden: true, offline: true, age: 90_000 });
+it('defers startup while hidden/offline and fetches on return', async () => {
+  const client = await setup({ hidden: true, offline: true });
   await vi.advanceTimersByTimeAsync(120_000);
   client.online(true);
   expect(fetch).not.toHaveBeenCalled();
@@ -108,8 +109,87 @@ it('defers old-page startup while hidden/offline and refreshes on return', async
   expect(fetch).toHaveBeenCalledTimes(1);
 });
 
-it('refreshes old pages immediately and coalesces triggers during a request', async () => {
-  const client = await setup({ age: 90_000 });
+function closure(): LiveData {
+  return { ...snapshot(), overrides: { 'tisch-library': [{ from: '2026-09-10', hours: 'closed', note: 'Feed closure' }] } };
+}
+
+/** A live request that never answers on its own; it rejects only when the client aborts it. */
+function hanging(): { live: typeof fetch; resolve: (response: Response) => void } {
+  let resolve!: (response: Response) => void;
+  const live = ((_url: unknown, init?: RequestInit) => new Promise<Response>((done, reject) => {
+    resolve = done;
+    init?.signal?.addEventListener('abort', () => reject(new Error('aborted')));
+  })) as typeof fetch;
+  return { live, resolve: (response) => resolve(response) };
+}
+
+it('renders scheduled statuses at once, then patches live overrides in when the snapshot arrives', async () => {
+  const request = hanging();
+  await setup({ live: request.live });
+  // No timers have run: the scheduled hours are already on screen while the live request is in flight.
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Closes');
+  expect(card.querySelectorAll('.week tr').length).toBeGreaterThan(0);
+  expect(document.body.textContent).not.toContain('Checking…');
+  expect(document.body.textContent).not.toContain('Live hours unavailable');
+  expect(document.getElementById('clock')!.textContent).toContain('12:00 PM');
+  expect(document.getElementById('live-sources')!.textContent).toBe(' (loading live feeds…)');
+  request.resolve(new Response(JSON.stringify(closure())));
+  await vi.advanceTimersByTimeAsync(0);
+  expect(card.dataset.state).toBe('closed');
+  expect(card.textContent).toContain('Feed closure');
+  expect(document.body.textContent).not.toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: ok');
+});
+
+it('keeps scheduled statuses usable when the live request is slow, then times out', async () => {
+  await setup({ live: hanging().live });
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  await vi.advanceTimersByTimeAsync(9_999);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).not.toContain('Live hours unavailable');
+  await vi.advanceTimersByTimeAsync(1);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: error');
+  await vi.advanceTimersByTimeAsync(120_000);
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+it('keeps scheduled statuses when the live request fails outright', async () => {
+  await setup({ live: async () => new Response('{}', { status: 503 }) });
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('open');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  expect(document.querySelector<HTMLElement>('#loc-dewick')!.dataset.state).toBe('open');
+});
+
+it('renders the scheduled statuses at once when loaded offline, without requesting live data', async () => {
+  await setup({ offline: true });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(document.querySelectorAll('.card[data-state="pending"]').length).toBe(0);
+  const card = document.querySelector<HTMLElement>('#loc-tisch-library')!;
+  expect(card.dataset.state).toBe('open');
+  expect(card.textContent).toContain('Live hours unavailable');
+  expect(document.getElementById('live-sources')!.textContent).toContain('library: error');
+});
+
+it('renders scheduled statuses in a hidden tab and fetches live data once it is shown', async () => {
+  const client = await setup({ hidden: true });
+  expect(fetch).not.toHaveBeenCalled();
+  expect(document.querySelector<HTMLElement>('#loc-tisch-library')!.dataset.state).toBe('open');
+  client.visibility('visible');
+  await vi.advanceTimersByTimeAsync(0);
+  expect(fetch).toHaveBeenCalledTimes(1);
+});
+
+it('coalesces triggers during a request', async () => {
+  const client = await setup();
   await vi.advanceTimersByTimeAsync(0);
   expect(fetch).toHaveBeenCalledTimes(1);
   let resolve!: (response: Response) => void;
@@ -133,9 +213,9 @@ it('waits two minutes after a failed poll even when visibility changes', async (
   client.visibility('hidden');
   client.visibility('visible');
   await vi.advanceTimersByTimeAsync(119_999);
-  expect(fetch).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(1);
   expect(fetch).toHaveBeenCalledTimes(2);
+  await vi.advanceTimersByTimeAsync(1);
+  expect(fetch).toHaveBeenCalledTimes(3);
 });
 
 it('preserves interactions and the basic beacon without custom tracking requests', async () => {
@@ -161,6 +241,7 @@ it('preserves interactions and the basic beacon without custom tracking requests
   card.open = true;
   await vi.advanceTimersByTimeAsync(1_000);
   expect(client.beacon).not.toHaveBeenCalled();
-  expect(fetch).not.toHaveBeenCalled();
+  expect(fetch).toHaveBeenCalledTimes(1);
+  expect(vi.mocked(fetch).mock.calls.every(([url]) => url === '/api/live')).toBe(true);
   expect(document.querySelector('script[data-cf-beacon]')!.getAttribute('data-cf-beacon')).toContain('test-token');
 });

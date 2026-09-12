@@ -1,7 +1,6 @@
-import type { Calendar, Location, Status } from '../engine/types';
-import type { LiveData } from '../engine/live';
+import type { Location } from '../engine/types';
 import { DATA_VERIFIED } from '../data';
-import { esc, renderClock, renderGroups, renderToolbar } from './render';
+import { esc, renderPendingGroups, renderToolbar } from './render';
 
 /** Jumbo, the Tufts elephant (athletics logo; used here in an unofficial, non-commercial student project). */
 export const MARK_SVG = `<img class="mark" src="/jumbo.svg" width="40" height="44" alt="Jumbo the elephant" decoding="async">`;
@@ -11,23 +10,17 @@ export interface PageOptions {
   beaconToken?: string;
 }
 
-export function renderPage(
-  locations: Location[],
-  statuses: Status[],
-  cal: Calendar,
-  live: LiveData,
-  at: Date,
-  opts: PageOptions = {},
-): string {
-  const liveJson = JSON.stringify(live).replace(/</g, '\\u003c');
+/**
+ * The static homepage, generated once at build time and served as an asset without invoking the Worker.
+ * Nothing time-dependent is baked in: cards render in a pending state and the browser bundle computes
+ * statuses from the same dataset as soon as it runs, then patches in the live snapshot from /api/live.
+ */
+export function renderPage(locations: Location[], opts: PageOptions = {}): string {
   // Cloudflare Web Analytics beacon (cookie-less, no PII). The attribute is double-quoted, so esc() keeps it safe.
   const beacon = opts.beaconToken
     ? `\n<script defer src="https://static.cloudflareinsights.com/beacon.min.js" data-cf-beacon="${esc(JSON.stringify({ token: opts.beaconToken }))}"></script>`
     : '';
   const verified = DATA_VERIFIED ? fmtDateRange(DATA_VERIFIED.earliest, DATA_VERIFIED.latest) : 'recently';
-  const liveSources = Object.entries(live.sources)
-    .map(([k, v]) => `${k}: ${v}`)
-    .join(', ');
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -58,21 +51,21 @@ export function renderPage(
       ${MARK_SVG}
       <h1><span class="q">Is it open?</span><span class="sub">Tufts · Medford/Somerville</span></h1>
     </div>
-    <div class="clock" id="clock">${renderClock(at, cal)}</div>
+    <div class="clock" id="clock"><time>&nbsp;</time><span class="ctx ctx-pending">&nbsp;</span></div>
   </div>
   ${renderToolbar()}
 </header>
 <main id="list" class="list" data-cat="all">
-  ${renderGroups(locations, statuses, live)}
+  <noscript><p class="nojs">Live status needs JavaScript. Each card still links to the official Tufts page for its hours.</p></noscript>
+  ${renderPendingGroups(locations)}
   <p class="empty" id="empty" hidden>Nothing on the Hill matches that. Try another search, or turn off <em>Open now</em>.</p>
 </main>
 <footer class="foot">
   <div class="colophon">
     <span class="credit">Built by Aaron Chung, a Tufts student.</span>
   </div>
-  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, the Bray Lab shop calendar, and the shuttle tracker<span id="live-sources">${liveSources ? ` (${esc(liveSources)})` : ''}</span>. Always confirm before a special trip.</p>
-</footer>
-<script>window.__LIVE__=${liveJson};window.__RENDERED_AT__=${JSON.stringify(at.toISOString())};</script>${beacon}
+  <p>Unofficial and not affiliated with Tufts University. Hours come from official Tufts pages (checked ${esc(verified)}) plus live feeds from the library calendar, the dining menu system, the Bray Lab shop calendar, and the shuttle tracker<span id="live-sources"></span>. Always confirm before a special trip.</p>
+</footer>${beacon}
 </body>
 </html>`;
 }

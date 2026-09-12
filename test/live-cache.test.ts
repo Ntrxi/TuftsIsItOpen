@@ -30,6 +30,7 @@ describe('live snapshot cache and health', () => {
     vi.setSystemTime(new Date(NOW.getTime() + 20 * 60_000));
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('offline')));
     const second = await request('/api/live');
+    expect(second.headers.get('cache-control')).toBe('public, max-age=60');
     const data = await second.json() as LiveData;
     expect(data.sources).toEqual({ library: 'error', dining: 'error', bray: 'error', shuttles: 'error' });
     expect(data.overrides.carmichael?.[0]?.hours).toBeUndefined();

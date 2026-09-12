@@ -1020,3 +1020,35 @@ h1 .sub {
     grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
   }
 }
+
+/* Before hydration: the static page ships every card as "Checking…" ---------- */
+
+.card[data-state='pending']::before {
+  background: var(--rule);
+}
+
+.card[data-state='pending'] .dot {
+  background: transparent;
+  border-style: dotted;
+}
+
+.card[data-state='pending'] .state {
+  color: var(--ink-3);
+  font-style: normal;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.ctx-pending {
+  visibility: hidden;
+}
+
+.nojs {
+  margin: 16px 0 0;
+  padding: 10px 12px;
+  border: 2px solid var(--line);
+  background: var(--soon-soft);
+  color: var(--ink);
+  font-size: 0.9rem;
+  box-shadow: var(--shadow-sm);
+}
