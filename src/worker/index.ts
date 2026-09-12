@@ -100,20 +100,68 @@ function json(body: unknown, init: ResponseInit = {}): Response {
 }
 
 /**
- * Resolve the optional `at` query parameter: absent means now; a value `Date` can parse means that
- * instant; anything else (including an empty string) is `null`, and the route answers 400 rather than
- * silently evaluating the current time under a timestamp the caller never asked for.
+ * Strict ISO-8601 timestamp: `YYYY-MM-DDTHH:MM[:SS[.fff]]` followed by a mandatory `Z` or
+ * `±HH:MM` offset. Requiring the offset removes the ambiguity of local-time strings, and the
+ * explicit shape keeps `Date`'s lenient parser (which accepts `09/12/2026` and the like) out of
+ * the contract.
+ */
+const ISO_AT =
+  /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2})(?:\.(\d{1,3}))?)?(?:(Z)|([+-])(\d{2}):(\d{2}))$/i;
+
+/**
+ * Parse a strict ISO-8601 timestamp into an instant, or `null` if the string does not match the
+ * shape or names a calendar date/time that does not exist (e.g. `2026-02-30`, `25:00`, `+99:00`).
+ * `Date.UTC` silently rolls impossible fields forward, so every field is checked against the
+ * round-tripped result instead of trusting the constructor.
+ */
+export function parseIsoTimestamp(text: string): Date | null {
+  const m = ISO_AT.exec(text);
+  if (!m) return null;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const hour = Number(m[4]);
+  const minute = Number(m[5]);
+  const second = Number(m[6] ?? '0');
+  const ms = Number((m[7] ?? '0').padEnd(3, '0'));
+  const wall = new Date(Date.UTC(year, month - 1, day, hour, minute, second, ms));
+  if (
+    wall.getUTCFullYear() !== year ||
+    wall.getUTCMonth() !== month - 1 ||
+    wall.getUTCDate() !== day ||
+    wall.getUTCHours() !== hour ||
+    wall.getUTCMinutes() !== minute ||
+    wall.getUTCSeconds() !== second
+  ) {
+    return null;
+  }
+  let offsetMinutes = 0;
+  if (!m[8]) {
+    const offHour = Number(m[10]);
+    const offMinute = Number(m[11]);
+    if (offHour > 23 || offMinute > 59) return null;
+    offsetMinutes = (offHour * 60 + offMinute) * (m[9] === '-' ? -1 : 1);
+  }
+  const instant = new Date(wall.getTime() - offsetMinutes * 60_000);
+  return Number.isNaN(instant.getTime()) ? null : instant;
+}
+
+/**
+ * Resolve the optional `at` query parameter: absent means now; a strict ISO-8601 timestamp with an
+ * explicit offset means that instant; anything else (including an empty string) is `null`, and the
+ * route answers 400 rather than silently evaluating the current time under a timestamp the caller
+ * never asked for.
  */
 function parseAt(url: URL): Date | null {
   if (!url.searchParams.has('at')) return new Date();
-  const at = url.searchParams.get('at')!.trim();
-  if (!at) return null;
-  const d = new Date(at);
-  return Number.isNaN(d.getTime()) ? null : d;
+  return parseIsoTimestamp(url.searchParams.get('at')!.trim());
 }
 
 const invalidAt = (): Response =>
-  json({ error: "Invalid 'at' parameter; expected an ISO-8601 timestamp" }, { status: 400, headers: { 'cache-control': 'no-store' } });
+  json(
+    { error: "Invalid 'at' parameter; expected an ISO-8601 timestamp with a UTC offset, e.g. 2026-09-12T15:04:05Z" },
+    { status: 400, headers: { 'cache-control': 'no-store' } },
+  );
 
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
