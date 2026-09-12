@@ -58,6 +58,7 @@ describe('format helpers', () => {
     expect(t('24:00')).toBe(1440);
     expect(t('25:30')).toBe(1530);
     expect(t('47:59')).toBe(2879);
+    expect(t('48:00')).toBe(2880);
   });
   it('rejects malformed minutes instead of normalizing them', () => {
     expect(() => t('7:99')).toThrow(/Bad time: 7:99/);
@@ -72,8 +73,9 @@ describe('format helpers', () => {
     expect(() => t('00:30am')).toThrow(/Bad time: 00:30am/);
     expect(() => t('24am')).toThrow(/Bad time: 24am/);
   });
-  it('rejects unsuffixed hours beyond the supported extended range', () => {
-    expect(() => t('48:00')).toThrow(/Bad time: 48:00/);
+  it('rejects unsuffixed times beyond the 48:00 engine ceiling', () => {
+    expect(() => t('48:01')).toThrow(/Bad time: 48:01/);
+    expect(() => t('49:00')).toThrow(/Bad time: 49:00/);
     expect(() => t('99:00')).toThrow(/Bad time: 99:00/);
   });
   it('still rejects strings that do not look like clock times', () => {
