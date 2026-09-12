@@ -46,6 +46,43 @@ describe('format helpers', () => {
     expect(t('9pm')).toBe(1260);
     expect(t('24:05')).toBe(1445);
   });
+  it('accepts every well-formed clock shape', () => {
+    expect(t('0:00')).toBe(0);
+    expect(t('00:00')).toBe(0);
+    expect(t('23:59')).toBe(1439);
+    expect(t('1am')).toBe(60);
+    expect(t('1pm')).toBe(780);
+    expect(t('11:59pm')).toBe(1439);
+    expect(t(' 7:30 AM ')).toBe(450);
+    // Unsuffixed hours past midnight stay valid for post-midnight service (engine cap is 48:00).
+    expect(t('24:00')).toBe(1440);
+    expect(t('25:30')).toBe(1530);
+    expect(t('47:59')).toBe(2879);
+  });
+  it('rejects malformed minutes instead of normalizing them', () => {
+    expect(() => t('7:99')).toThrow(/Bad time: 7:99/);
+    expect(() => t('7:60')).toThrow(/Bad time: 7:60/);
+    expect(() => t('7:60pm')).toThrow(/Bad time: 7:60pm/);
+    expect(() => t('23:60')).toThrow(/Bad time: 23:60/);
+  });
+  it('rejects 12-hour clock values outside 1-12', () => {
+    expect(() => t('13pm')).toThrow(/Bad time: 13pm/);
+    expect(() => t('13:00pm')).toThrow(/Bad time: 13:00pm/);
+    expect(() => t('0am')).toThrow(/Bad time: 0am/);
+    expect(() => t('00:30am')).toThrow(/Bad time: 00:30am/);
+    expect(() => t('24am')).toThrow(/Bad time: 24am/);
+  });
+  it('rejects unsuffixed hours beyond the supported extended range', () => {
+    expect(() => t('48:00')).toThrow(/Bad time: 48:00/);
+    expect(() => t('99:00')).toThrow(/Bad time: 99:00/);
+  });
+  it('still rejects strings that do not look like clock times', () => {
+    expect(() => t('')).toThrow(/Bad time/);
+    expect(() => t('7:5')).toThrow(/Bad time: 7:5/);
+    expect(() => t('7:305')).toThrow(/Bad time: 7:305/);
+    expect(() => t('noon')).toThrow(/Bad time: noon/);
+    expect(() => t('7am-9pm')).toThrow(/Bad time/);
+  });
   it('formats times and ranges', () => {
     expect(fmtTime(0)).toBe('12:00 AM');
     expect(fmtTime(1440)).toBe('12:00 AM');
