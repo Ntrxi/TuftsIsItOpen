@@ -616,6 +616,12 @@ h1 .sub {
   background: var(--open-soft);
 }
 
+/* A retained shuttle count from a stale snapshot: the neutral chip palette, never the "live" green. */
+.chip-stale {
+  color: var(--ink-2);
+  border-style: dashed;
+}
+
 /*
  * The pin is its own full-height column at the card's right edge, split from
  * the expand target by a rule. Everything left of the rule toggles the card;

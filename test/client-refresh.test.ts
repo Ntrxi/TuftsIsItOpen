@@ -46,17 +46,22 @@ it('retains recent data through failures, expires by age, and recovers without A
   await vi.advanceTimersByTimeAsync(0);
   expect(document.body.textContent).toContain('3 buses live');
   vi.mocked(fetch).mockResolvedValue(new Response('{}', { status: 503 }));
+  // Offline, the retained count is shown as the last one seen, never as live.
   window.dispatchEvent(new Event('offline'));
-  expect(document.body.textContent).toContain('3 buses live');
+  expect(document.body.textContent).not.toContain('3 buses live');
+  expect(document.body.textContent).toContain('Last seen: 3 buses');
   // Polling pauses while offline and resumes on reconnect (jsdom never flips navigator.onLine itself).
   window.dispatchEvent(new Event('online'));
   await vi.advanceTimersByTimeAsync(120_000);
   expect(fetch).toHaveBeenCalled();
-  expect(document.body.textContent).toContain('3 buses live');
+  expect(document.body.textContent).not.toContain('3 buses live');
+  expect(document.body.textContent).toContain('Last seen: 3 buses');
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
   vi.mocked(fetch).mockResolvedValue(new Response('{"overrides":{}}'));
   await vi.advanceTimersByTimeAsync(120_000);
+  // Past the vehicle TTL the count is gone in every form.
   expect(document.body.textContent).not.toContain('3 buses live');
+  expect(document.body.textContent).not.toContain('Last seen');
   expect(document.querySelector('#loc-carmichael')?.getAttribute('data-state')).toBe('closed');
   // Timeout must abort, but cannot erase hours inside their TTL.
   let signal: AbortSignal | undefined;
