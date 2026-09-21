@@ -37,8 +37,12 @@ describe('static homepage', () => {
       expect(pending).toContain(attr);
       expect(rendered).toContain(attr);
     }
-    const shape = (card: string) => card.match(/class="(card-head|card-body|card-main|card-name|card-status|pin|col)"/g)?.sort();
+    const shape = (card: string) => card.match(/class="(card-head|card-body|card-main|card-name|card-status|swipe|col)"/g)?.sort();
     expect(shape(pending)).toEqual(shape(rendered));
+    const dewick = locations.find((l) => l.id === 'dewick')!;
+    const dining = renderCard(dewick, computeStatus(dewick, calendar, localToDate('2026-09-17', t('19:00'))), EMPTY_LIVE);
+    expect(shape(dining)).toContain('class="swipe"');
+    expect(shape(renderPendingCard(dewick))).toEqual(shape(dining));
   });
 
   it('embeds the analytics beacon only when a token is configured, escaped for the attribute', () => {

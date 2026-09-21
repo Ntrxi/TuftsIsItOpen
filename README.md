@@ -13,7 +13,7 @@ src/
   engine/     schedule types, campus-time math, and status computation
   data/       sourced hours, overrides, and academic-calendar rules
   render/     HTML shared by the build (static page) and browser updates
-  client/     search, filters, pinning, and refresh behavior
+  client/     search, filters, and refresh behavior
   worker/     API routes, caching, and live-feed providers
 scripts/      the build: client bundle plus the prerendered public/index.html
 public/       static assets (icons, manifest, _headers, built index.html/app.js/app.css)

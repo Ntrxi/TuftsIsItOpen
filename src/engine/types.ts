@@ -125,6 +125,8 @@ export interface Location {
   };
   /** Always-visible note (e.g. "Swipe access after 5 PM"). */
   note?: string;
+  /** Dining only: whether meal swipes (or swipe equivalency) are accepted. Shown on the card head. */
+  mealSwipes?: boolean;
   /** Emergency / after-hours guidance (health). */
   afterHours?: string;
   transit?: TransitInfo;

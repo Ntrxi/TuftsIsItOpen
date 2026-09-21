@@ -50,18 +50,6 @@ async function setup({ hidden = false, offline = false, storage = {} as Record<s
   };
 }
 
-it.each([{}, ['dewick', 42]])('resets malformed persisted pins without crashing', async (saved) => {
-  await setup({ storage: { 'iio:pinned': saved } });
-  expect(localStorage.getItem('iio:pinned')).toBeNull();
-  expect(document.querySelector<HTMLElement>('.group[data-group="pinned"]')!.hidden).toBe(true);
-});
-
-it('discards missing location IDs from persisted pins', async () => {
-  await setup({ storage: { 'iio:pinned': ['dewick', 'retired-location'] } });
-  expect(localStorage.getItem('iio:pinned')).toBe('["dewick"]');
-  expect(document.querySelector<HTMLElement>('#loc-dewick')!.closest<HTMLElement>('.group')!.dataset.group).toBe('pinned');
-});
-
 it.each(['old-category', {}, ['library']])('resets invalid persisted categories to all', async (saved) => {
   await setup({ storage: { 'iio:cat': saved } });
   expect(localStorage.getItem('iio:cat')).toBeNull();
@@ -234,9 +222,10 @@ it('preserves interactions and the basic beacon without custom tracking requests
   document.querySelector<HTMLButtonElement>('.filter[data-cat="all"]')!.click();
   document.querySelector<HTMLButtonElement>('#open-only')!.click();
   expect(document.querySelector('#open-only')!.getAttribute('aria-pressed')).toBe('true');
-  card.querySelector<HTMLButtonElement>('.pin')!.click();
-  expect(card.closest<HTMLElement>('.group')!.dataset.group).toBe('pinned');
-  expect(card.querySelector('.pin')!.getAttribute('aria-pressed')).toBe('true');
+  // The meal swipe badge is a label inside the head, not a control, and survives hydration.
+  expect(card.querySelector('.swipe')!.getAttribute('aria-label')).toBe('Accepts meal swipes');
+  expect(card.querySelector('.card-head button')).toBeNull();
+  expect(card.closest<HTMLElement>('.group')!.dataset.group).toBe('dining');
   card.open = false;
   card.open = true;
   await vi.advanceTimersByTimeAsync(1_000);
