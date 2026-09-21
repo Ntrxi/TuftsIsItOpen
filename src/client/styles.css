@@ -366,10 +366,6 @@ h1 .sub {
   font-family: var(--sans);
 }
 
-.group[data-group='pinned'] h2 .icon {
-  color: var(--soon);
-}
-
 .cards {
   display: flex;
   flex-direction: column;
@@ -623,55 +619,41 @@ h1 .sub {
 }
 
 /*
- * The pin is its own full-height column at the card's right edge, split from
- * the expand target by a rule. Everything left of the rule toggles the card;
- * everything right of it pins. The column bleeds into the head padding so
- * there is no dead strip around the button that would expand instead.
+ * Dining cards end in a full-height meal swipe column at the right edge, split
+ * from the rest of the head by a rule. It is a label, not a control: clicking
+ * it expands the card like the rest of the head. The column bleeds into the
+ * head padding so it reads as part of the card edge.
  */
-.pin {
+.swipe {
   flex: 0 0 auto;
   align-self: stretch;
-  min-width: 52px;
-  border: 0;
+  width: 58px;
   border-left: 2px dashed var(--rule);
-  background: transparent;
-  color: var(--ink-3);
   padding: 0 4px;
   margin: -12px -12px -12px 4px;
-  cursor: pointer;
-  display: grid;
-  place-items: center;
-  -webkit-tap-highlight-color: transparent;
-  transition: background 0.12s, color 0.12s;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  text-align: center;
+  color: var(--blue-ink);
 }
 
-.pin svg path {
-  fill: transparent;
-  stroke-width: 1.6;
+.swipe-text {
+  font-size: 0.58rem;
+  font-weight: 800;
+  line-height: 1.1;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
-.pin:focus-visible {
-  outline: 3px solid var(--brown);
-  outline-offset: -3px;
+.swipe[data-swipes='no'] {
+  color: var(--ink-3);
 }
 
-@media (hover: hover) {
-  .pin:hover {
-    color: var(--soon);
-    background: color-mix(in srgb, var(--soon) 12%, transparent);
-  }
-}
-
-.pin:active {
-  background: color-mix(in srgb, var(--soon) 22%, transparent);
-}
-
-.pin[aria-pressed='true'] {
-  color: var(--soon);
-}
-
-.pin[aria-pressed='true'] svg path {
-  fill: currentColor;
+.swipe-gap {
+  stroke: var(--card);
 }
 
 .chev {
@@ -1008,8 +990,7 @@ h1 .sub {
     padding: 14px 14px 14px 20px;
   }
 
-  .pin {
-    min-width: 56px;
+  .swipe {
     margin: -14px -14px -14px 4px;
   }
 

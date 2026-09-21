@@ -7,7 +7,6 @@ import type { State } from '../engine/types';
 
 const TICK_MS = 30_000;
 const LIVE_POLL_MS = 120_000;
-const LS_PINNED = 'iio:pinned';
 const LS_CAT = 'iio:cat';
 
 const byId = new Map(locations.map((l) => [l.id, l]));
@@ -20,7 +19,6 @@ let live: LiveData = EMPTY_LIVE;
  */
 let liveSettled = false;
 let disconnected = !navigator.onLine;
-let pinned = readPinned();
 let cat = readCategory();
 let query = '';
 let openOnly = false;
@@ -71,18 +69,6 @@ function writeJson(key: string, value: unknown): void {
   }
 }
 
-function readPinned(): Set<string> {
-  const value = readJson(LS_PINNED);
-  if (value === undefined) return new Set();
-  if (!Array.isArray(value) || !value.every((id): id is string => typeof id === 'string')) {
-    removeStored(LS_PINNED);
-    return new Set();
-  }
-  const valid = value.filter((id) => byId.has(id));
-  if (valid.length !== value.length) writeJson(LS_PINNED, valid);
-  return new Set(valid);
-}
-
 function readCategory(): string {
   const value = readJson(LS_CAT);
   if (typeof value === 'string' && categories.has(value)) return value;
@@ -111,56 +97,10 @@ function refresh(): void {
     if (head) updateHTML(head, parts.head);
     if (body) updateHTML(body, parts.body);
     card.dataset.state = parts.state;
-    syncPinButton(card);
   }
   const health = document.getElementById('live-sources');
   const healthText = liveSettled ? ` (${Object.entries(current.sources).map(([id, state]) => `${id}: ${state}`).join(', ')})` : ' (loading live feeds…)';
   if (health && health.textContent !== healthText) health.textContent = healthText;
-  applyFilters();
-}
-
-function syncPinButton(card: Element): void {
-  const id = (card as HTMLElement).dataset.id ?? '';
-  const btn = $<HTMLButtonElement>('.pin', card);
-  if (btn) btn.setAttribute('aria-pressed', pinned.has(id) ? 'true' : 'false');
-}
-
-/* Pinning ----------------------------------------------------------------- */
-
-function placePinned(): void {
-  const pinnedGroup = $<HTMLElement>('.group[data-group="pinned"]');
-  const pinnedCards = pinnedGroup ? $('.cards', pinnedGroup) : null;
-  if (!pinnedGroup || !pinnedCards) return;
-  // Move pinned cards up, and unpinned cards back to their category group (in original order).
-  for (const card of $$<HTMLElement>('.card')) {
-    const id = card.dataset.id ?? '';
-    const loc = byId.get(id);
-    if (!loc) continue;
-    const wantGroup = pinned.has(id) ? 'pinned' : loc.category;
-    const currentGroup = card.closest<HTMLElement>('.group')?.dataset.group;
-    if (wantGroup !== currentGroup) {
-      const target = $<HTMLElement>(`.group[data-group="${wantGroup}"] .cards`);
-      if (!target) continue;
-      if (wantGroup === 'pinned') {
-        target.appendChild(card);
-      } else {
-        // Reinsert in dataset order.
-        const order = locations.filter((l) => l.category === loc.category).map((l) => l.id);
-        const myIndex = order.indexOf(id);
-        const next = Array.from(target.children).find((c) => order.indexOf((c as HTMLElement).dataset.id ?? '') > myIndex);
-        target.insertBefore(card, next ?? null);
-      }
-    }
-    syncPinButton(card);
-  }
-  pinnedGroup.hidden = pinned.size === 0;
-}
-
-function togglePin(id: string): void {
-  if (pinned.has(id)) pinned.delete(id);
-  else pinned.add(id);
-  writeJson(LS_PINNED, Array.from(pinned));
-  placePinned();
   applyFilters();
 }
 
@@ -186,8 +126,7 @@ function applyFilters(): number {
       card.hidden = !show;
       if (show) groupVisible++;
     }
-    const isPinnedGroup = group.dataset.group === 'pinned';
-    group.hidden = groupVisible === 0 || (isPinnedGroup && pinned.size === 0);
+    group.hidden = groupVisible === 0;
     visible += groupVisible;
   }
   const empty = document.getElementById('empty');
@@ -291,16 +230,6 @@ function init(): void {
     }
   }
 
-  // Pin buttons live inside <summary>; stop the click from toggling the card.
-  document.addEventListener('click', (e) => {
-    const btn = (e.target as Element).closest<HTMLButtonElement>('.pin');
-    if (!btn) return;
-    e.preventDefault();
-    e.stopPropagation();
-    const card = btn.closest<HTMLElement>('.card');
-    if (card?.dataset.id) togglePin(card.dataset.id);
-  });
-
   // Deep link: /#loc-dewick opens that card.
   if (location.hash.startsWith('#loc-')) {
     const card = document.getElementById(location.hash.slice(1)) as HTMLDetailsElement | null;
@@ -313,7 +242,6 @@ function init(): void {
   // Scheduled hours render at once from the bundled dataset; live overrides are patched in below.
   // Offline, the scheduled hours are all there is, so the live annotations apply straight away.
   liveSettled = !navigator.onLine;
-  placePinned();
   refresh();
 
   // Keep statuses current: every 30s, when the tab becomes visible, and after the device wakes.

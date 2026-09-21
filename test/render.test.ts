@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { renderCard, vehicleChip } from '../src/render/render';
+import { renderCard, renderPendingCard, swipeBadge, vehicleChip } from '../src/render/render';
 import { fmtDateRange, renderPage } from '../src/render/page';
 import { computeStatus } from '../src/engine/status';
 import { localToDate } from '../src/engine/time';
@@ -52,6 +52,32 @@ describe('card chips', () => {
       expect(html).not.toContain('buses');
     }
     expect(vehicleChip(undefined, 'ok')).toBe('');
+  });
+});
+
+describe('meal swipe badge', () => {
+  it('states whether every dining location takes meal swipes, in both card forms', () => {
+    const accepts = ['dewick', 'carmichael', 'commons-late-night', 'hodgdon', 'kindlevan', 'pax-et-lox', 'smfa-cafe'];
+    const dining = locations.filter((l) => l.category === 'dining');
+    expect(dining.filter((l) => l.mealSwipes).map((l) => l.id).sort()).toEqual([...accepts].sort());
+    for (const loc of dining) {
+      expect(typeof loc.mealSwipes).toBe('boolean');
+      const label = loc.mealSwipes ? 'aria-label="Accepts meal swipes"' : 'aria-label="No meal swipes"';
+      expect(swipeBadge(loc)).toContain(label);
+      expect(renderPendingCard(loc)).toContain(label);
+      expect(renderCard(loc, computeStatus(loc, calendar, at('2026-09-17', '12:00')), EMPTY_LIVE)).toContain(label);
+    }
+  });
+
+  it('is absent outside dining, and no card carries a favorite button', () => {
+    for (const loc of locations.filter((l) => l.category !== 'dining')) {
+      expect(loc.mealSwipes).toBeUndefined();
+      expect(renderPendingCard(loc)).not.toContain('class="swipe"');
+    }
+    const html = renderPage(locations);
+    expect(html).not.toContain('class="pin"');
+    expect(html).not.toContain('data-group="pinned"');
+    expect(html).not.toMatch(/<summary[^>]*>(?:(?!<\/summary>)[\s\S])*<button/);
   });
 });
 

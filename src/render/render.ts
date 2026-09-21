@@ -63,6 +63,22 @@ export function vehicleChip(vehicles: number | undefined, source: LiveData['sour
   return `<span class="chip chip-stale" title="Last count from the live tracker; the feed has not refreshed recently">Last seen: ${buses}</span>`;
 }
 
+/**
+ * The meal swipe badge at the right edge of a dining card's head. It says both answers, accepted
+ * or not, so a missing badge only ever means the question does not apply (non-dining cards).
+ */
+export function swipeBadge(loc: Location): string {
+  if (loc.mealSwipes === undefined) return '';
+  const label = loc.mealSwipes ? 'Accepts meal swipes' : 'No meal swipes';
+  // The slash sits on a card-colored gap so it stays legible where it crosses the card outline.
+  const slash = loc.mealSwipes ? '' : '<path class="swipe-gap" d="M4 20L20 4" stroke-width="5" stroke-linecap="round"/><path d="M4 20L20 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/>';
+  return `
+    <span class="swipe" data-swipes="${loc.mealSwipes ? 'yes' : 'no'}" role="img" aria-label="${label}" title="${label}">
+      <svg viewBox="0 0 24 24" width="22" height="22" aria-hidden="true"><rect x="2.5" y="5.5" width="19" height="13" rx="2" fill="none" stroke="currentColor" stroke-width="1.8"/><path d="M2.5 10h19M6 15h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>${slash}</svg>
+      <span class="swipe-text" aria-hidden="true">${loc.mealSwipes ? 'Swipes' : 'No swipes'}</span>
+    </span>`;
+}
+
 function headInner(loc: Location, st: Status, live: LiveData): string {
   const liveChip = loc.category === 'transit' ? vehicleChip(live.vehicles[loc.id], live.sources.shuttles) : '';
   const period = st.period ? `<span class="period">${esc(st.period)}${st.periodEnds ? ` until ${esc(st.periodEnds)}` : ''}</span>` : '';
@@ -80,10 +96,7 @@ function headInner(loc: Location, st: Status, live: LiveData): string {
       <span class="card-status"><span class="state">${esc(st.label)}</span><span class="detail">${esc(st.detail)}</span>${period}${chips(loc, st)}${liveChip}</span>
       ${departures}
     </span>
-    <span class="chev" aria-hidden="true"></span>
-    <button class="pin" type="button" aria-label="Pin ${esc(loc.name)} to top" aria-pressed="false" title="Pin to top">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-    </button>`;
+    <span class="chev" aria-hidden="true"></span>${swipeBadge(loc)}`;
 }
 
 function bodyInner(loc: Location, st: Status): string {
@@ -180,17 +193,13 @@ export function renderPendingCard(loc: Location): string {
       <span class="card-name">${esc(loc.name)}</span>
       <span class="card-status"><span class="state">Checking…</span></span>
     </span>
-    <span class="chev" aria-hidden="true"></span>
-    <button class="pin" type="button" aria-label="Pin ${esc(loc.name)} to top" aria-pressed="false" title="Pin to top">
-      <svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><path d="M12 2.5l2.9 6.1 6.6.8-4.9 4.6 1.3 6.6L12 17.3l-5.9 3.3 1.3-6.6L2.5 9.4l6.6-.8z" fill="currentColor" stroke="currentColor" stroke-width="1.2" stroke-linejoin="round"/></svg>
-    </button></summary>
+    <span class="chev" aria-hidden="true"></span>${swipeBadge(loc)}</summary>
   <div class="card-body"><div class="col">${left.join('')}</div><div class="col">${right.join('')}</div></div>
 </details>`;
 }
 
 export function renderPendingGroups(locations: Location[]): string {
   const groups: string[] = [];
-  groups.push(`<section class="group" data-group="pinned" hidden><h2><span class="icon">★</span>Pinned</h2><div class="cards"></div></section>`);
   for (const cat of CATEGORY_ORDER as Category[]) {
     const locs = locations.filter((l) => l.category === cat);
     if (!locs.length) continue;
