@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { _internal } from '../src/worker/live';
-import { computeStatus } from '../src/engine/status';
+import { computeAll, computeStatus } from '../src/engine/status';
 import { calendar, locations } from '../src/data';
 import { localToDate } from '../src/engine/time';
 
@@ -86,6 +86,32 @@ describe('Nutrislice weekly menu parsing', () => {
   it('reports nothing for ordinary days', () => {
     expect(nutrisliceDayOverride('2026-09-08', [served, served, served])).toBeUndefined();
     expect(nutrisliceDayOverride('2026-09-08', [])).toBeUndefined();
+  });
+
+  it.each(['No Late Night/Holiday Weekend', 'Labor Day holiday weekend menu', 'Spring break menu'])('keeps scheduled hours for an informational banner without food: %s', (text) => {
+    expect(nutrisliceDayOverride('2026-10-09', [{ text, hasFood: false }])).toEqual({
+      from: '2026-10-09', note: `Tufts Dining notice: “${text}”`,
+    });
+  });
+
+  it.each(['Dinner closed for the food fair', 'Cafe closes at 5', 'Closed until 11am', 'Closing early today'])('does not turn a partial closure into a full-day closure: %s', (text) => {
+    expect(nutrisliceDayOverride('2026-10-09', [{ text, hasFood: false }])?.hours).toBe('unknown');
+  });
+
+  it('preserves Friday dining service when every menu carries the no-late-night banner', () => {
+    const date = '2026-10-09';
+    const summary = readMenuDay({ date, menu_items: [holiday('No Late Night/Holiday Weekend')] })!;
+    const live = Object.fromEntries(_internal.NUTRISLICE.map(({ locId, menus }) => [
+      locId, [nutrisliceDayOverride(date, menus.map(() => summary))!],
+    ]));
+    const statuses = computeAll(locations, calendar, localToDate(date, 570), live);
+    expect(statuses.filter((s) => s.state === 'open' && live[s.id]).map((s) => s.id)).toEqual([
+      'dewick', 'carmichael', 'hodgdon', 'hotung', 'kindlevan', 'mugar-cafe', 'smfa-cafe',
+    ]);
+    const commons = locations.find((l) => l.id === 'commons')!;
+    expect(computeStatus(commons, calendar, localToDate(date, 660), live).state).toBe('open');
+    const lateNight = locations.find((l) => l.id === 'commons-late-night')!;
+    expect(computeStatus(lateNight, calendar, localToDate(date, 1320), live).state).toBe('closed');
   });
 });
 

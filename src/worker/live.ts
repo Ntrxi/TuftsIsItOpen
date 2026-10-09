@@ -230,7 +230,8 @@ interface MenuDay {
   hasFood: boolean;
 }
 
-const CLOSED_RE = /\b(close[ds]?|closing|closures?|holiday|break|no service|not open)\b/i;
+const CLOSED_RE = /\b(close[ds]?|closing|closures?|no service|not open)\b/i;
+const PARTIAL_CLOSURE_RE = /\b(breakfast|brunch|lunch|dinner|late[\s-]+night|early)\b|\b(at|after|until|from)\s+\d/i;
 
 /** Summarize one menu's day; undefined when nothing is published for it (no food and no notice). */
 function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
@@ -242,16 +243,17 @@ function readMenuDay(day: NutrisliceDay): MenuDay | undefined {
 
 /**
  * Combine every published menu for a date into one override, or undefined when there is
- * nothing to report. The day counts as closed only when every published menu is a closure
- * notice with no food. Mixed closure/service evidence cannot establish exact opening hours.
+ * nothing to report. Only explicit, unscoped closures without food close the whole day.
+ * Partial closures and mixed closure/service evidence cannot establish exact opening hours.
  */
 function nutrisliceDayOverride(date: string, menus: MenuDay[]): DateOverride | undefined {
   const texts = [...new Set(menus.map((m) => m.text).filter(Boolean))];
   if (!date || !texts.length) return undefined;
   const quoted = texts.map((t) => `“${t}”`).join(', ');
-  const allClosed = menus.every((m) => m.text && !m.hasFood && CLOSED_RE.test(m.text));
+  const closures = menus.filter((m) => !m.hasFood && CLOSED_RE.test(m.text));
+  const allClosed = closures.length === menus.length && closures.every((m) => !PARTIAL_CLOSURE_RE.test(m.text));
   if (allClosed) return { from: date, hours: 'closed', note: `Closed: ${quoted} (per Tufts Dining menu)` };
-  if (menus.some((m) => !m.hasFood && CLOSED_RE.test(m.text))) return { from: date, hours: 'unknown', note: `Dining service differs by meal; confirm hours: ${quoted}` };
+  if (closures.length) return { from: date, hours: 'unknown', note: `Dining service differs by meal; confirm hours: ${quoted}` };
   return { from: date, note: `Tufts Dining notice: ${quoted}` };
 }
 
